@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.12 2004/04/23 08:53:51 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.13 2004/04/26 21:15:19 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 /*
@@ -35,6 +35,16 @@ struct MLListEntry
 /** information about the map list being edited by the client */
 var protected array<MLListEntry> MLList;
 
+/** a session struct to keep information during some commands that request information from the client */
+struct SessionEntry
+{
+	/** session entries */
+	var array<string> entries;
+	var UnGatewayClient client;
+};
+var protected array<SessionEntry> Sessions;
+
+//!localization
 var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgInvalidValue, msgUnknownSetting, msgNotEditing, msgSaved, msgSaveFailed,
 	msgChangedAborted, msgUnauthorizedSetting, msgSettingPrivs, msgTrueOrFalse,
@@ -48,9 +58,14 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMaplistCreateUsage, msgCreateError, msgMaplistDeleteUsage, msgMaplistRemoved,
 	msgMaplistRenameUsage, msgMaplistRenamed, msgPolicyRemoveUsage, msgPolicyAddUsage,
 	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy, msgNoSuchGameType,
-	msgMultiAdmin;
+	msgMultiAdmin, msgSessionError, msgPasswordPrompt1, msgPasswordPrompt2,
+	msgPasswordMatchError, msgPasswordUpdated, msgAdminAddUsage, msgAdminRemoveUsage,
+	msgInvalidPassword, msgAdminCreated, msgAdminCreateExists, msgAdminCreateInvalid,
+	msgAdminPrivileges	, msgAdminMergedPrivileges, msgAdminMaxSecLevel, msgAdminNoSuch,
+	msgAdminRemoved	, msgAdminEditUsage, msgAdminMaster, msgAdminUsage, msgAdminEditPrivUpdate,
+	msgAdminEditAddPriv	;
 
-var localized string CommandHelp[7];
+var localized string CommandHelp[8];
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -215,6 +230,23 @@ function bool EditedML(UnGatewayClient client, int GI, int MI)
 		}
 	}
 	return false;
+}
+
+/** returns the index in the session list */
+function int GetSession(UnGatewayClient client, optional bool bNoCreate)
+{
+	local int j;
+	for (j = 0; j < Sessions.length; j++)
+	{
+		if (Sessions[j].client == client)
+		{
+			return j;
+		}
+	}
+	if (bNoCreate) return -1;
+	Sessions.length = j+1;
+	Sessions[j].client = client;
+	return j;
 }
 
 function execSet(UnGatewayClient client, array<string> cmd)
@@ -823,8 +855,15 @@ static function bool isIDPolicy(string pol)
 
 function execAdmin(UnGatewayClient client, array<string> cmd)
 {
-	local int i;
+	local int i, idx;
+	local xAdminUser xau;
+
 	if (Level.Game.AccessControl.Users == none)
+	{
+		client.outputError(msgMultiAdmin);
+		return;
+	}
+	if (AccessControlIni(Level.Game.AccessControl) == none)
 	{
 		client.outputError(msgMultiAdmin);
 		return;
@@ -836,19 +875,288 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			client.outputError(msgUnauthorized);
 			return;
 		}
-		for (i = 0; i < Level.Game.AccessControl.Users.Users.length; i++)
+		for (i = 0; i < Level.Game.AccessControl.Users.Count(); i++)
 		{
-			client.output(Level.Game.AccessControl.Users.Users[i].UserName);
-			client.output("Privileges:"@Level.Game.AccessControl.Users.Users[i].Privileges, "    ");
-			client.output("Merged privileges:"@Level.Game.AccessControl.Users.Users[i].MergedPrivs, "    ");
-			client.output("Security level:"@Level.Game.AccessControl.Users.Users[i].MaxSecLevel(), "    ");
+			xau = Level.Game.AccessControl.Users.Get(i);
+			client.output(xau.UserName);
+			client.output(msgAdminPrivileges@privilegesToString(xau.Privileges), "    ");
+			client.output(msgAdminMergedPrivileges@privilegesToString(xau.MergedPrivs), "    ");
+			client.output(msgAdminMaxSecLevel@xau.MaxSecLevel(), "    ");
+			client.output(msgAdminMaster@xau.bMasterAdmin, "    ");
+		}
+	}
+	else if (cmd[0] ~= "password")
+	{
+		idx = GetSession(client);
+		Sessions[idx].entries[0] = cmd[0];
+		client.requestInput(self, msgPasswordPrompt1, true);
+	}
+	else if (cmd[0] ~= "add")
+	{
+		if (!Auth.HasPermission(client,, "Aa"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgAdminAddUsage);
+			return;
+		}
+		if (Level.Game.AccessControl.Users.FindByName(cmd[1]) != none)
+		{
+			client.outputError(repl(msgAdminCreateExists, "%s", cmd[1]));
+			return;
+		}
+		if (!class'xAdminUser'.static.ValidName(cmd[1]))
+		{
+			client.outputError(repl(msgAdminCreateInvalid, "%s", cmd[1]));
+			return;
+		}
+		idx = GetSession(client);
+		Sessions[idx].entries[0] = cmd[0]; // add
+		Sessions[idx].entries[1] = cmd[1]; // username
+		if (cmd.length > 2) Sessions[idx].entries[2] = cmd[2]; // privs
+		else Sessions[idx].entries[2] = "";
+		client.requestInput(self, msgPasswordPrompt1, true);
+	}
+	else if (cmd[0] ~= "remove")
+	{
+		if (!Auth.HasPermission(client,, "Aa"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgAdminRemoveUsage);
+			return;
+		}
+		xau = Level.Game.AccessControl.Users.FindByName(cmd[1]);
+		if (xau == none)
+		{
+			client.outputError(repl(msgAdminNoSuch, "%s", cmd[1]));
+			return;
+		}
+		Level.Game.AccessControl.Users.Remove(xau);
+		Level.Game.AccessControl.SaveAdmins();
+		client.output(msgAdminRemoved);
+	}
+	else if (cmd[0] ~= "edit")
+	{
+		if ((cmd.length < 3) || (cmd[2] == ""))
+		{
+			client.outputError(msgAdminEditUsage);
+			return;
+		}
+		xau = Level.Game.AccessControl.Users.FindByName(cmd[1]);
+		if (xau == none)
+		{
+			client.outputError(repl(msgAdminNoSuch, "%s", cmd[1]));
+			return;
+		}
+		if (cmd[2] ~= "password")
+		{
+			if (!Auth.HasPermission(client,, "Ae"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			idx = GetSession(client);
+			Sessions[idx].entries[0] = cmd[0]$cmd[2]; // edit
+			Sessions[idx].entries[1] = cmd[1]; // username
+			client.requestInput(self, msgPasswordPrompt1, true);
+		}
+		else if (cmd[2] ~= "setpriv")
+		{
+			if (!Auth.HasPermission(client,, "Ae"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4) xau.Privileges = "";
+			else xau.Privileges = cmd[3];
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "addpriv")
+		{
+			if (!Auth.HasPermission(client,, "Ae"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditAddPriv);
+				return;
+			}
+			if (InStr("|"$xau.Privileges$"|", "|"$cmd[3]$"|") == -1) xau.Privileges = xau.Privileges$"|"$cmd[3];
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "delpriv")
+		{
+			if (!Auth.HasPermission(client,, "Ae"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditAddPriv);
+				return;
+			}
+			if (InStr("|"$xau.Privileges$"|", "|"$cmd[3]$"|") == -1)
+			{
+				xau.Privileges = xau.Privileges$"|"$cmd[3];
+			}
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+	}
+	else client.outputError(msgAdminUsage);
+}
+
+function RequestInputResult(UnGatewayClient client, coerce string result)
+{
+	local int idx;
+	local xAdminUser xau;
+
+	idx = GetSession(client);
+	if ((idx == -1) || (Sessions[idx].entries.length == 0))
+	{
+		client.outputError(msgSessionError);
+		client.endRequestInput(self);
+		return;
+	}
+	if (Sessions[idx].entries[0] ~= "password")
+	{
+		if (Sessions[idx].entries.length < 2)
+		{
+			if (!class'xAdminUser'.static.ValidPass(result))
+			{
+				client.outputError(msgInvalidPassword);
+				Sessions[idx].entries.Length = 0;
+				client.endRequestInput(self);
+				return;
+			}
+			Sessions[idx].entries[1] = result;
+			client.requestInput(self, msgPasswordPrompt2, true);
+		}
+		else {
+			if (Sessions[idx].entries[1] != result)
+			{
+				client.outputError(msgPasswordMatchError);
+			}
+			else {
+				Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController).Password = Sessions[idx].entries[1];
+				Level.Game.AccessControl.SaveAdmins();
+				client.output(msgPasswordUpdated);
+			}
+			Sessions[idx].entries.Length = 0;
+			client.endRequestInput(self);
+		}
+	}
+	if (Sessions[idx].entries[0] ~= "add")
+	{
+		if (Sessions[idx].entries.length < 4)
+		{
+			if (!class'xAdminUser'.static.ValidPass(result))
+			{
+				client.outputError(msgInvalidPassword);
+				Sessions[idx].entries.Length = 0;
+				client.endRequestInput(self);
+				return;
+			}
+			Sessions[idx].entries[3] = result;
+			client.requestInput(self, msgPasswordPrompt2, true);
+		}
+		else {
+			if (Sessions[idx].entries[3] != result)
+			{
+				client.outputError(msgPasswordMatchError);
+			}
+			else {
+				xau = Level.Game.AccessControl.Users.Create(Sessions[idx].entries[1], Sessions[idx].entries[3], Sessions[idx].entries[2]);
+				Level.Game.AccessControl.Users.Add(xau);
+				Level.Game.AccessControl.SaveAdmins();
+				client.output(repl(msgAdminCreated, "%s", Sessions[idx].entries[1]));
+			}
+			Sessions[idx].entries.Length = 0;
+			client.endRequestInput(self);
+		}
+	}
+	else if (Sessions[idx].entries[0] ~= "editpassword")
+	{
+		if (Sessions[idx].entries.length < 3)
+		{
+			if (!class'xAdminUser'.static.ValidPass(result))
+			{
+				client.outputError(msgInvalidPassword);
+				Sessions[idx].entries.Length = 0;
+				client.endRequestInput(self);
+				return;
+			}
+			Sessions[idx].entries[2] = result;
+			client.requestInput(self, msgPasswordPrompt2, true);
+		}
+		else {
+			if (Sessions[idx].entries[2] != result)
+			{
+				client.outputError(msgPasswordMatchError);
+			}
+			else {
+				xau = Level.Game.AccessControl.Users.FindByName(Sessions[idx].entries[1]);
+				xau.Password = Sessions[idx].entries[2];
+				Level.Game.AccessControl.SaveAdmins();
+				client.output(msgPasswordUpdated);
+			}
+			Sessions[idx].entries.Length = 0;
+			client.endRequestInput(self);
 		}
 	}
 }
 
+function string privilegesToString(string priv, optional string delim)
+{
+	local array<string> privs;
+	local int i;
+	if (delim == "") delim = ", ";
+	split(priv, "|", privs);
+	priv = "";
+	for (i = 0; i < privs.length; i++)
+	{
+		if (priv != "") priv $= delim;
+		priv $= privilegeToString(privs[i]);
+	}
+	return priv;
+}
+
+function string privilegeToString(string priv)
+{
+	local int i,j;
+	local array<string> privs;
+
+	if (priv == "") return "";
+	for (i = 0; i < Level.Game.AccessControl.PrivManagers.Length; i++)
+	{
+		if ((InStr(Level.Game.AccessControl.PrivManagers[i].MainPrivs, priv) > -1) ||
+			(InStr(Level.Game.AccessControl.PrivManagers[i].SubPrivs, priv) > -1))
+		{
+			split(Level.Game.AccessControl.PrivManagers[i].MainPrivs$"|"$Level.Game.AccessControl.PrivManagers[i].SubPrivs, "|", privs);
+		}
+		for (j = 0; j < privs.length; j++)
+		{
+			if (privs[j] == priv) return Level.Game.AccessControl.PrivManagers[i].Tags[j]@"("$privs[j]$")";
+		}
+	}
+	return priv;
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.12 2004/04/23 08:53:51 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.13 2004/04/26 21:15:19 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -865,7 +1173,7 @@ defaultproperties
 	CommandHelp[4]="Manage map lists.ÿThis command will allow you to create, delete, rename, list or activate map lists.ÿIt will also allow you to change the maplist that can be edited with 'mledit'.ÿTo list maplists of other game types than the current game type use: maplist list package.gametypeÿUsage: maplist <create|delete|rename|edit|activate|list> ..."
 	CommandHelp[5]="Edit a map list.ÿWith the command you can edit the current maplist.ÿUse the 'maplist' command to change the maplist being edited.ÿmledit <add|remove|move|list|save|abort|available> ..."
 	CommandHelp[6]="Manage access policies.ÿWithout any arguments the current access policy will be listed.ÿUsage: policy <add|remove> ..."
-	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit> ...ÿUsage: admin add <username> <password> <password>ÿUsage: admin remove <username>ÿUsage: admin edit <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
+	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit|password> ...ÿUsage: admin add <username>ÿUsage: admin remove <username>ÿUsage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -927,4 +1235,25 @@ defaultproperties
 	msgNoSuchPolicy="No such policy: %s"
 	msgNoSuchGameType="No such gametype: %s"
 	msgMultiAdmin="No multi admin system has been enabled (xAdmin.AccessControlIni)"
+	msgSessionError="Internal session error"
+	msgPasswordPrompt1="Password: "
+	msgPasswordPrompt2="Again:    "
+	msgPasswordMatchError="Passwords do no match"
+	msgPasswordUpdated="Password changed"
+	msgAdminAddUsage="Usage: admin add <username>"
+	msgAdminRemoveUsage="Usage: admin remove <username>"
+	msgInvalidPassword="Invalid password"
+	msgAdminCreated="Admin %s created"
+	msgAdminCreateExists="User %s already exists"
+	msgAdminCreateInvalid="Invalid username: %s"
+	msgAdminPrivileges="Privileges:"
+	msgAdminMergedPrivileges="Merged privileges:"
+	msgAdminMaxSecLevel="Security level:"
+	msgAdminNoSuch="No such admin: %s"
+	msgAdminRemoved="Admin user removed"
+	msgAdminEditUsage="Usage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
+	msgAdminMaster="Master admin:"
+	msgAdminUsage="admin <list|add|remove|edit|password> ..."
+	msgAdminEditPrivUpdate="Privileges updated"
+	msgAdminEditAddPriv="Usage: admin edit <username> addpriv <privilege>"
 }
