@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.15 2004/05/01 15:56:05 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.16 2004/05/17 09:24:50 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -780,6 +780,7 @@ function execPolicy(UnGatewayClient client, array<string> cmd)
 		if (isIPPolicy(cmd[1]))
 		{
 			Level.Game.AccessControl.IPPolicies[Level.Game.AccessControl.IPPolicies.length] = cmd[1];
+			Level.Game.AccessControl.SaveConfig();
 			client.output(repl(msgPolicyAdd, "%s", cmd[1]));
 		}
 		else if (isIDPolicy(cmd[1]))
@@ -787,6 +788,7 @@ function execPolicy(UnGatewayClient client, array<string> cmd)
 			Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length] = cmd[1];
 			cmd.remove(0, 2);
 			Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length-1] @= join(cmd, " ");
+			Level.Game.AccessControl.SaveConfig();
 			client.output(repl(msgPolicyAdd, "%s", Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length-1]));
 		}
 		else {
@@ -807,12 +809,14 @@ function execPolicy(UnGatewayClient client, array<string> cmd)
 			{
 				client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.IPPolicies[n]));
 				Level.Game.AccessControl.IPPolicies.remove(n, 1);
+				Level.Game.AccessControl.SaveConfig();
 			}
 			else if (n < Level.Game.AccessControl.BannedIDs.length)
 			{
 				n -= Level.Game.AccessControl.IPPolicies.length;
 				client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.BannedIDs[n]));
 				Level.Game.AccessControl.BannedIDs.remove(n, 1);
+				Level.Game.AccessControl.SaveConfig();
 			}
 			else {
 				client.outputError(repl(msgInvalidIndex, "%i", n));
@@ -825,6 +829,7 @@ function execPolicy(UnGatewayClient client, array<string> cmd)
 				{
 					client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.IPPolicies[i]));
 					Level.Game.AccessControl.IPPolicies.remove(i, 1);
+					Level.Game.AccessControl.SaveConfig();
 					return;
 				}
 			}
@@ -834,6 +839,7 @@ function execPolicy(UnGatewayClient client, array<string> cmd)
 				{
 					client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.BannedIDs[i]));
 					Level.Game.AccessControl.BannedIDs.remove(i, 1);
+					Level.Game.AccessControl.SaveConfig();
 					return;
 				}
 			}
@@ -1514,7 +1520,7 @@ function execGroup(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.15 2004/05/01 15:56:05 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.16 2004/05/17 09:24:50 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
