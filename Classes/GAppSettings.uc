@@ -7,13 +7,9 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.14 2004/04/27 08:15:37 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.15 2004/05/01 15:56:05 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
-/*
-	TODO:
-	- admin add/remove/edit commands
-*/
 
 /** PlayInfo, UnGatewayClient association */
 struct PIListEntry
@@ -63,10 +59,14 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgInvalidPassword, msgAdminCreated, msgAdminCreateExists, msgAdminCreateInvalid,
 	msgAdminPrivileges, msgAdminMergedPrivileges, msgAdminMaxSecLevel, msgAdminNoSuch,
 	msgAdminRemoved, msgAdminEditUsage, msgAdminMaster, msgAdminUsage, msgAdminEditPrivUpdate,
-	msgAdminEditAddPriv	, msgAdminEditInvalidGroup, msgAdminEditGroupAdded, msgAdminEditAddGroupUsage,
-	msgAdminEditDelGroupUsage, msgAdminEditDelGroup;
+	msgAdminEditAddPriv, msgAdminEditInvalidGroup, msgAdminEditGroupAdded, msgAdminEditAddGroupUsage,
+	msgAdminEditDelGroupUsage, msgAdminEditDelGroup, msgAdminEditAddmGroupUsage,
+	msgAdminEditDelmGroupUsage, msgAdminLGroups, msgAdminLMGroups, msgGroupUsers,
+	msgGroupManagers, msgGroupAddUsage, msgGroupInvalidName, msgGroupExists, msgGroupAdded,
+	msgGroupInvalidSecLevel	, msgGroupRemoveUsage, msgGroupDoesNotExists, msgGroupRemoved,
+	msgGroupEditUsage	, msgGroupSecLevelUpdate, msgGroupMaster;
 
-var localized string CommandHelp[9];
+var localized string CommandHelp[10];
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -84,6 +84,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[6].Name: execPolicy(client, cmd); return true;
 		case Commands[7].Name: execAdmin(client, cmd); return true;
 		case Commands[8].Name: execPrivilege(client, cmd); return true;
+		case Commands[9].Name: execGroup(client, cmd); return true;
 	}
 	return false;
 }
@@ -860,6 +861,8 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 	local int i, idx;
 	local xAdminUser xau;
 	local xAdminGroup xag;
+	local xAdminUserList xul;
+	local string tmp;
 
 	if (Level.Game.AccessControl.Users == none)
 	{
@@ -878,14 +881,30 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			client.outputError(msgUnauthorized);
 			return;
 		}
-		for (i = 0; i < Level.Game.AccessControl.Users.Count(); i++)
+		xau = Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController);
+		xul = xau.GetManagedUsers(Level.Game.AccessControl.Groups);
+		for (idx = 0; idx < xul.Count(); idx++)
 		{
-			xau = Level.Game.AccessControl.Users.Get(i);
+			xau = xul.Get(idx);
 			client.output(xau.UserName);
 			client.output(msgAdminPrivileges@privilegesToString(xau.Privileges), "    ");
 			client.output(msgAdminMergedPrivileges@privilegesToString(xau.MergedPrivs), "    ");
 			client.output(msgAdminMaxSecLevel@xau.MaxSecLevel(), "    ");
 			client.output(msgAdminMaster@xau.bMasterAdmin, "    ");
+			tmp = "";
+			for (i = 0; i < xau.Groups.Count(); i++)
+			{
+				if (tmp != "") tmp $= ", ";
+				tmp $= xau.Groups.Get(i).GroupName;
+			}
+			client.output(msgAdminLGroups@tmp, "    ");
+			tmp = "";
+			for (i = 0; i < xau.ManagedGroups.Count(); i++)
+			{
+				if (tmp != "") tmp $= ", ";
+				tmp $= xau.ManagedGroups.Get(i).GroupName;
+			}
+			client.output(msgAdminLMGroups@tmp, "    ");
 		}
 	}
 	else if (cmd[0] ~= "password")
@@ -941,6 +960,7 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			client.outputError(repl(msgAdminNoSuch, "%s", cmd[1]));
 			return;
 		}
+		xau.UnlinkGroups();
 		Level.Game.AccessControl.Users.Remove(xau);
 		Level.Game.AccessControl.SaveAdmins();
 		client.output(msgAdminRemoved);
@@ -953,7 +973,7 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			return;
 		}
 		xau = Level.Game.AccessControl.Users.FindByName(cmd[1]);
-		if (Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController).CanManageUser(xau))
+		if (!Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController).CanManageUser(xau))
 		{
 			client.outputError(msgUnauthorized);
 			return;
@@ -1085,6 +1105,68 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			}
 			Level.Game.AccessControl.SaveAdmins();
 		}
+		else if (cmd[2] ~= "addmgroup")
+		{
+			if (!Auth.HasPermission(client,, "Ag"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditAddMGroupUsage);
+				return;
+			}
+			for (i = 3; i < cmd.length; i ++)
+			{
+				xag = Level.Game.AccessControl.Groups.FindByName(cmd[i]);
+				if (xag == none)
+				{
+					client.outputError(repl(msgAdminEditInvalidGroup, "%s", cmd[i]));
+				}
+				else {
+					xau.AddManagedGroup(xag);
+					client.output(repl(repl(msgAdminEditGroupAdded, "%user", xau.UserName), "%group", xag.GroupName));
+				}
+			}
+			Level.Game.AccessControl.SaveAdmins();
+		}
+		else if (cmd[2] ~= "delmgroup")
+		{
+			if (!Auth.HasPermission(client,, "Ag"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditDelMGroupUsage);
+				return;
+			}
+			for (i = 3; i < cmd.length; i ++)
+			{
+				xag = Level.Game.AccessControl.Groups.FindByName(cmd[i]);
+				if (xag == none)
+				{
+					client.outputError(repl(msgAdminEditInvalidGroup, "%s", cmd[i]));
+				}
+				else {
+					xau.RemoveManagedGroup(xag);
+					client.output(repl(repl(msgAdminEditDelGroup, "%user", xau.UserName), "%group", xag.GroupName));
+				}
+			}
+			Level.Game.AccessControl.SaveAdmins();
+		}
+		else if (cmd[2] ~= "master")
+		{
+			xau.bMasterAdmin = cmd[3] ~= string(true);
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(repl(msgGroupMaster, "%b", xau.bMasterAdmin));
+		}
+		else {
+			client.outputError(msgAdminEditUsage);
+			return;
+		}
 	}
 	else client.outputError(msgAdminUsage);
 }
@@ -1189,6 +1271,7 @@ function RequestInputResult(UnGatewayClient client, coerce string result)
 	}
 }
 
+/** converts a permission list to a list with privilege names */
 function string privilegesToString(string priv, optional string delim)
 {
 	local array<string> privs;
@@ -1204,6 +1287,7 @@ function string privilegesToString(string priv, optional string delim)
 	return priv;
 }
 
+/** converts the privilege token to it's string representation */
 function string privilegeToString(string priv)
 {
 	local int i,j;
@@ -1242,9 +1326,195 @@ function execPrivilege(UnGatewayClient client, array<string> cmd)
 	}
 }
 
+function execGroup(UnGatewayClient client, array<string> cmd)
+{
+	local int i, idx;
+	local xAdminUser xau;
+	local xAdminGroup xag;
+	local xAdminGroupList xgl;
+	local string tmp;
+
+	if (Level.Game.AccessControl.Users == none)
+	{
+		client.outputError(msgMultiAdmin);
+		return;
+	}
+	if (AccessControlIni(Level.Game.AccessControl) == none)
+	{
+		client.outputError(msgMultiAdmin);
+		return;
+	}
+	if ((cmd.length == 0) || (cmd[0] == "") || (cmd[0] ~= "list"))
+	{
+		if (!Auth.HasPermission(client,, "Gl"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		xau = Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController);
+		if (xau.bMasterAdmin) xgl = Level.Game.AccessControl.Groups;
+		else xgl = xau.ManagedGroups;
+		for (idx = 0; idx < xgl.Count(); idx++)
+		{
+			xag = xgl.Get(idx);
+			client.output(xag.GroupName);
+			client.output(msgAdminPrivileges@privilegesToString(xag.Privileges), "    ");
+			client.output(msgAdminMaxSecLevel@xag.GameSecLevel, "    ");
+			client.output(msgAdminMaster@xag.bMasterAdmin, "    ");
+			tmp = "";
+			for (i = 0; i < xag.Users.Count(); i++)
+			{
+				if (tmp != "") tmp $= ", ";
+				tmp $= xag.Users.Get(i).UserName;
+			}
+			client.output(msgGroupUsers@tmp, "    ");
+			tmp = "";
+			for (i = 0; i < xag.Managers.Count(); i++)
+			{
+				if (tmp != "") tmp $= ", ";
+				tmp $= xag.Managers.Get(i).UserName;
+			}
+			client.output(msgGroupManagers@tmp, "    ");
+		}
+	}
+	else if (cmd[0] ~= "add")
+	{
+		if (!Auth.HasPermission(client,, "Ga"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgGroupAddUsage);
+			return;
+		}
+		if (!class'xAdminGroup'.static.ValidName(cmd[1]))
+		{
+			client.outputError(repl(msgGroupInvalidName, "%s", cmd[1]));
+			return;
+		}
+		if (Level.Game.AccessControl.Groups.FindByName(cmd[1]) != none)
+		{
+			client.outputError(repl(msgGroupExists, "%s", cmd[1]));
+			return;
+		}
+		if (cmd.length < 3) cmd[2] = "";
+		if (cmd.length < 4) cmd[3] = "0";
+		if (!intval(cmd[3], i))
+		{
+			client.outputError(repl(msgGroupInvalidSecLevel, "%s", cmd[3]));
+			return;
+		}
+		xag = level.Game.AccessControl.Groups.CreateGroup(cmd[1], cmd[2], i);
+		Level.Game.AccessControl.Groups.Add(xag);
+		Level.Game.AccessControl.SaveAdmins();
+		client.output(repl(msgGroupAdded, "%s", cmd[1]));
+	}
+	else if (cmd[0] ~= "remove")
+	{
+		if (!Auth.HasPermission(client,, "Ga"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgGroupRemoveUsage);
+			return;
+		}
+		xag = Level.Game.AccessControl.Groups.FindByName(cmd[1]);
+		if (xag == none)
+		{
+			client.outputError(repl(msgGroupDoesNotExists, "%s", cmd[1]));
+			return;
+		}
+		xag.UnlinkUsers();
+		Level.Game.AccessControl.Groups.Remove(xag);
+		Level.Game.AccessControl.SaveAdmins();
+		client.output(repl(msgGroupRemoved, "%s", cmd[1]));
+	}
+	else if (cmd[0] ~= "edit")
+	{
+		if (!Auth.HasPermission(client,, "Ge"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		if ((cmd.length < 3) || (cmd[1] == "") || (cmd[2] == ""))
+		{
+			client.outputError(msgGroupEditUsage);
+			return;
+		}
+		if (cmd.length < 3) cmd[3] = "";
+		xag = Level.Game.AccessControl.Groups.FindByName(cmd[1]);
+		if (xag == none)
+		{
+			client.outputError(repl(msgGroupDoesNotExists, "%s", cmd[1]));
+			return;
+		}
+		if (cmd[2] ~= "setperm")
+		{
+			xag.SetPrivs(cmd[3]);
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "addperm")
+		{
+			if (InStr("|"$xag.Privileges$"|", "|"$cmd[3]$"|") == -1)
+			{
+				cmd[3] = xag.Privileges$"|"$cmd[3];
+				xag.SetPrivs(cmd[3]);
+			}
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "delperm")
+		{
+			tmp = xag.Privileges;
+			if (InStr(tmp, "|"$cmd[3]$"|") > -1)
+			{
+				tmp = repl(tmp, "|"$cmd[3]$"|", "|");
+			}
+			if (InStr(tmp, cmd[3]$"|") == 0)
+			{
+				tmp = repl(tmp, cmd[3]$"|", "");
+			}
+			if (InStr(tmp, "|"$cmd[3]) == Len(tmp)-Len("|"$cmd[3]))
+			{
+				tmp = repl(tmp, "|"$cmd[3], "");
+			}
+			xag.SetPrivs(tmp);
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "seclevel")
+		{
+			if (!intval(cmd[3], i))
+			{
+				client.outputError(repl(msgGroupInvalidSecLevel, "%s", cmd[3]));
+				return;
+			}
+			xag.GameSecLevel = i;
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(msgGroupSecLevelUpdate);
+		}
+		else if (cmd[2] ~= "master")
+		{
+			xag.bMasterAdmin = cmd[3] ~= string(true);
+			Level.Game.AccessControl.SaveAdmins();
+			client.output(repl(msgGroupMaster, "%b", xag.bMasterAdmin));
+		}
+		else {
+			client.outputError(msgGroupEditUsage);
+			return;
+		}
+	}
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.14 2004/04/27 08:15:37 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.15 2004/05/01 15:56:05 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -1254,6 +1524,7 @@ defaultproperties
 	Commands[6]=(Name="policy",Permission="Xi")
 	Commands[7]=(Name="admin",Permission="A")
 	Commands[8]=(Name="privilege")
+	Commands[9]=(Name="group",Permission="G")
 
 	CommandHelp[0]="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>"
 	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsage: edit [-game] <class name>"
@@ -1262,8 +1533,9 @@ defaultproperties
 	CommandHelp[4]="Manage map lists.ÿThis command will allow you to create, delete, rename, list or activate map lists.ÿIt will also allow you to change the maplist that can be edited with 'mledit'.ÿTo list maplists of other game types than the current game type use: maplist list package.gametypeÿUsage: maplist <create|delete|rename|edit|activate|list> ..."
 	CommandHelp[5]="Edit a map list.ÿWith the command you can edit the current maplist.ÿUse the 'maplist' command to change the maplist being edited.ÿmledit <add|remove|move|list|save|abort|available> ..."
 	CommandHelp[6]="Manage access policies.ÿWithout any arguments the current access policy will be listed.ÿUsage: policy <add|remove> ..."
-	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit|password> ...ÿUsage: admin add <username>ÿUsage: admin remove <username>ÿUsage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
+	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit|password|master> ...ÿUsage: admin add <username>ÿUsage: admin remove <username>ÿUsage: admin edit <username> <password|addgroup|delgroup|addmgroup|delmgroup|addpriv|delpriv|setpriv> ..."
 	CommandHelp[8]="List all privileges.ÿUsage: privilege <match>"
+	CommandHelp[9]="Manage user groups.ÿThis command is only available when using the so called xAdmin system.ÿUsage: group <list|add|remove|edit|master> ..."
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -1341,7 +1613,7 @@ defaultproperties
 	msgAdminMaxSecLevel="Security level:"
 	msgAdminNoSuch="No such admin: %s"
 	msgAdminRemoved="Admin user removed"
-	msgAdminEditUsage="Usage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
+	msgAdminEditUsage="Usage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv|master> ..."
 	msgAdminMaster="Master admin:"
 	msgAdminUsage="admin <list|add|remove|edit|password> ..."
 	msgAdminEditPrivUpdate="Privileges updated"
@@ -1351,4 +1623,21 @@ defaultproperties
 	msgAdminEditAddGroupUsage="Usage: admin edit <username> addgroup <group> ..."
 	msgAdminEditDelGroupUsage="Usage: admin edit <username> delgroup <group> ..."
 	msgAdminEditDelGroup="Removed user %user from group %group"
+	msgAdminEditAddmGroupUsage="Usage: admin edit <username> addmgroup <group> ..."
+	msgAdminEditDelmGroupUsage="Usage: admin edit <username> delmgroup <group> ..."
+	msgAdminLGroups="Groups:"
+	msgAdminLMGroups="Managed groups:"
+	msgGroupUsers="Users:"
+	msgGroupManagers="Managers:"
+	msgGroupAddUsage="Usage: group add <name> [privileges] [security level]"
+	msgGroupInvalidName="'%s' is not a valid group name"
+	msgGroupExists="A group with the name '%s' already exists"
+	msgGroupAdded="Added group %s"
+	msgGroupInvalidSecLevel="'%i' is not a valid security level"
+	msgGroupRemoveUsage="Usage: group remove <name>"
+	msgGroupDoesNotExists="There is no group with the name %s"
+	msgGroupRemoved="Removed the group %s"
+	msgGroupEditUsage="Usage: group edit <name> <setperm|addperm|delperm|seclevel|master> ..."
+	msgGroupSecLevelUpdate="Security level updated"
+	msgGroupMaster="Master admin switch set to %b"
 }
