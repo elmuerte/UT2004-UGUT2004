@@ -7,8 +7,9 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.1 2004/04/08 19:43:26 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.2 2004/04/11 21:43:29 elmuerte Exp $ -->
 *******************************************************************************/
+
 class GAppSystem extends UnGatewayApplication;
 
 /** delayed shutdown actor, if one is programmed this will be != none */
@@ -23,6 +24,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 	{
 		case Commands[0].Name: execShutdown(client, cmd); return true;
 		case Commands[1].Name: execAbortshutdown(client, cmd); return true;
+		case Commands[2].Name: execServerTravel(client, cmd); return true;
 	}
 	return false;
 }
@@ -77,9 +79,21 @@ function execAbortshutdown(UnGatewayClient client, array<string> cmd)
 	}
 }
 
+/** executes a "servertravel" console command */
+function execServerTravel(UnGatewayClient client, array<string> cmd)
+{
+	if ((cmd.length == 0) || (cmd[0] == ""))
+	{
+  		client.output(GetURLMap(true));
+	}
+	client.output("Server travel:"@cmd[0]);
+	//Level.ServerTravel(cmd[0], false);
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.1 2004/04/08 19:43:26 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.2 2004/04/11 21:43:29 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Help="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]")
 	Commands[1]=(Name="abortshutdown",Help="abort the delayed shutdown.")
+	Commands[2]=(Name="servertravel",Help="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]")
 }
