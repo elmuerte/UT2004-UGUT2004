@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.4 2004/04/13 16:04:34 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.5 2004/04/14 13:39:10 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -155,17 +155,17 @@ function SendPlayerInfo(UnGatewayClient client, PlayerController PC)
 {
 	if (PC == none) return;
 	client.output(PC.PlayerReplicationInfo.PlayerName);
-	client.output("    "$PadLeft(msgPSpectator, 15)@PC.PlayerReplicationInfo.bOnlySpectator);
-	client.output("    "$PadLeft(msgPAdmin, 15)@PC.PlayerReplicationInfo.bAdmin);
-	client.output("    "$PadLeft(msgPPing, 15)@PC.PlayerReplicationInfo.Ping);
-	client.output("    "$PadLeft(msgPClass, 15)@PC.Name);
-	client.output("    "$PadLeft(msgPAddress, 15)@PC.GetPlayerNetworkAddress());
-	client.output("    "$PadLeft(msgPHash, 15)@PC.GetPlayerIDHash());
+	client.output(PadLeft(msgPSpectator, 15)@PC.PlayerReplicationInfo.bOnlySpectator, "    ");
+	client.output(PadLeft(msgPAdmin, 15)@PC.PlayerReplicationInfo.bAdmin, "    ");
+	client.output(PadLeft(msgPPing, 15)@PC.PlayerReplicationInfo.Ping, "    ");
+	client.output(PadLeft(msgPClass, 15)@PC.Name, "    ");
+	client.output(PadLeft(msgPAddress, 15)@PC.GetPlayerNetworkAddress(), "    ");
+	client.output(PadLeft(msgPHash, 15)@PC.GetPlayerIDHash(), "    ");
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.4 2004/04/13 16:04:34 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.5 2004/04/14 13:39:10 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Help="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]",Level=255)
 	Commands[1]=(Name="abortshutdown",Help="abort the delayed shutdown.",Level=255)
 	Commands[2]=(Name="servertravel",Help="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]",Permission="Mr|Mt|Mm")
