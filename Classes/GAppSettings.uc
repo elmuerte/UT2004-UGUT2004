@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.3 2004/04/14 13:39:10 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.4 2004/04/14 15:34:28 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -37,6 +37,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[1].Name: execEdit(client, cmd); return true;
 		case Commands[2].Name: execSavesettings(client, cmd); return true;
 		case Commands[3].Name: execCancelsettings(client, cmd); return true;
+		case Commands[4].Name: execMaplist(client, cmd); return true;
 	}
 	return false;
 }
@@ -251,13 +252,20 @@ function execEdit(UnGatewayClient client, array<string> cmd)
  	else client.output(repl(msgEditing, "%s", cmd[0]));
 }
 
+function execMaplist(UnGatewayClient client, array<string> cmd)
+{
+	client.outputError("not yet implemented");
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.3 2004/04/14 13:39:10 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.4 2004/04/14 15:34:28 elmuerte Exp $"
 	Commands[0]=(Name="set",Help="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>",Permission="Ms")
 	Commands[1]=(Name="edit",Help="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsafe: edit [-game] <class name>",Permission="Ms")
 	Commands[2]=(Name="savesettings",Help="Save the settings you've made.ÿSettings are not saved until you execute this command.",Permission="Ms")
 	Commands[3]=(Name="cancelsettings",Help="Discard your changes.",Permission="Ms")
+
+	Commands[4]=(Name="maplist",Help="Edit a maplist.",Permission="Ms")
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."

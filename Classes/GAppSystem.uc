@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.5 2004/04/14 13:39:10 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.6 2004/04/14 15:34:28 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -18,7 +18,10 @@ var DelayedShutdown shutdownTimer;
 var localized string msgShutdownUsage, msgNow, msgShutdownRequest, msgShutdownDelay,
 	msgNegativeDelay, msgNoPending, msgShutdownAborted, msgServerTravel,
 	msgPlayerListHeader, msgSpectator, msgNoPlayerFound, msgPSpectator,
-	msgPAdmin, msgPPing, msgPClass, msgPAddress, msgPHash;
+	msgPAdmin, msgPPing, msgPClass, msgPAddress, msgPHash, msgGTTeamGame,
+	msgGTMapPrefix, msgGTGroup, msgMPlayers;
+
+var localized array<string> msgGTGroups;
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -31,6 +34,9 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[1].Name: execAbortshutdown(client, cmd); return true;
 		case Commands[2].Name: execServerTravel(client, cmd); return true;
 		case Commands[3].Name: execPlayers(client, cmd); return true;
+		case Commands[4].Name: execMutators(client, cmd); return true;
+		case Commands[5].Name: execGametypes(client, cmd); return true;
+		case Commands[6].Name: execMaps(client, cmd); return true;
 	}
 	return false;
 }
@@ -163,13 +169,84 @@ function SendPlayerInfo(UnGatewayClient client, PlayerController PC)
 	client.output(PadLeft(msgPHash, 15)@PC.GetPlayerIDHash(), "    ");
 }
 
+function execMutators(UnGatewayClient client, array<string> cmd)
+{
+	local array<CacheManager.MutatorRecord> muts;
+	local int i,j;
+
+	class'CacheManager'.static.GetMutatorList(muts);
+	if (cmd.length == 0 || cmd[0] == "") cmd[0] = "*";
+	for (i = 0; i < cmd.length; i++)
+	{
+		for (j = 0; j < muts.length; j++)
+		{
+			if (class'wString'.static.MaskedCompare(muts[j].ClassName, cmd[i]))
+			{
+				client.output(muts[j].ClassName);
+				client.output(muts[j].FriendlyName$iif(muts[j].GroupName != ""," ("$muts[j].GroupName$")",""), "    ");
+				if (muts[j].Description != "") client.output(muts[j].Description, "    ");
+			}
+		}
+	}
+}
+
+function execGametypes(UnGatewayClient client, array<string> cmd)
+{
+	local array<CacheManager.GameRecord> gts;
+	local int i,j;
+
+	class'CacheManager'.static.GetGameTypeList(gts);
+	if (cmd.length == 0 || cmd[0] == "") cmd[0] = "*";
+	for (i = 0; i < cmd.length; i++)
+	{
+		for (j = 0; j < gts.length; j++)
+		{
+			if (class'wString'.static.MaskedCompare(gts[j].ClassName, cmd[0]))
+			{
+				client.output(gts[j].ClassName);
+				client.output(gts[j].GameName, "    ");
+				if (gts[j].Description != "") client.output(gts[j].Description, "    ");
+				client.output(msgGTMapPrefix@gts[j].MapPrefix, "    ");
+				client.output(msgGTTeamGame@gts[j].bTeamGame, "    ");
+				client.output(msgGTGroup@msgGTGroups[gts[j].GameTypeGroup], "    ");
+			}
+		}
+	}
+}
+
+function execMaps(UnGatewayClient client, array<string> cmd)
+{
+	local array<CacheManager.MapRecord> mrs;
+	local int i,j;
+
+	class'CacheManager'.static.GetMapList(mrs);
+	if (cmd.length == 0 || cmd[0] == "") cmd[0] = "*";
+	for (i = 0; i < cmd.length; i++)
+	{
+		for (j = 0; j < mrs.length; j++)
+		{
+			if (class'wString'.static.MaskedCompare(mrs[j].MapName, cmd[0]))
+			{
+				client.output(mrs[j].MapName);
+				if (mrs[j].FriendlyName != "") client.output(mrs[j].FriendlyName, "    ");
+				if (mrs[j].Description != "") client.output(mrs[j].Description, "    ");
+				client.output(repl(repl(msgMPlayers, "%min", mrs[j].PlayerCountMin), "%max", mrs[j].PlayerCountMax), "    "); //TODO
+				if (mrs[j].ExtraInfo != "") client.output(mrs[j].ExtraInfo, "    ");
+			}
+		}
+	}
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.5 2004/04/14 13:39:10 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.6 2004/04/14 15:34:28 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Help="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]",Level=255)
 	Commands[1]=(Name="abortshutdown",Help="abort the delayed shutdown.",Level=255)
 	Commands[2]=(Name="servertravel",Help="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]",Permission="Mr|Mt|Mm")
 	Commands[3]=(Name="players",Help="Show details about the current players and spectators.ÿWhen an ID is provided more details will be shown about this user.ÿUsage: players [id|name] ...",Permission="Xp")
+	Commands[4]=(Name="mutators",Help="Show all available mutators.ÿBy default all mutators are listedÿUsage: mutators <match>")
+	Commands[5]=(Name="gametypes",Help="Show all available game types.ÿBy default all game types are listedÿUsage: gametypes <match>")
+	Commands[6]=(Name="maps",Help="Show all available maps.ÿBy default all maps are listedÿUsage: maps <match>")
 
 	msgShutdownUsage="Usage: shutdown <delay|now> [message]"
 	msgNow="now"
@@ -188,4 +265,12 @@ defaultproperties
 	msgPClass="Class:"
 	msgPAddress="Address:"
 	msgPHash"Hash:"
+	msgGTTeamGame="Team game:"
+	msgGTMapPrefix="Map prefix:"
+	msgGTGroup="Group:"
+	msgGTGroups[0]="UT2003"
+	msgGTGroups[1]="Bonus Pack #1"
+	msgGTGroups[2]="UT2004"
+	msgGTGroups[3]="Custom"
+	msgMPlayers="Player count: %min-%max"
 }
