@@ -7,13 +7,12 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.10 2004/04/21 15:38:02 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.11 2004/04/22 21:26:42 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 /*
 	TODO:
 	- admin add/remove/edit commands
-	- check "edit -game "gametype""
 */
 
 /** PlayInfo, UnGatewayClient association */
@@ -21,6 +20,7 @@ struct PIListEntry
 {
 	var PlayInfo PI;
 	var UnGatewayClient client;
+	var bool bChanged;
 };
 /** PlayInfo instance for each client */
 var protected array<PIListEntry> PIList;
@@ -47,7 +47,7 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList,
 	msgMaplistCreateUsage, msgCreateError, msgMaplistDeleteUsage, msgMaplistRemoved,
 	msgMaplistRenameUsage, msgMaplistRenamed, msgPolicyRemoveUsage, msgPolicyAddUsage,
-	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy;
+	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy, msgNoSuchGameType;
 
 var localized string CommandHelp[7];
 
@@ -85,11 +85,14 @@ function bool CanClose(UnGatewayClient client)
 	local bool res;
 
 	res = true;
-	if (GetPI(client, true) != none)
+	if (GetPI(client, true,, GI) != none)
 	{
-		client.output("");
-		client.outputError(msgAlreadyEditing);
-		res = false;
+		if (PIList[GI].bChanged)
+		{
+			client.output("");
+			client.outputError(msgAlreadyEditing);
+			res = false;
+		}
 	}
 	GetML(client, GI, MI, true);
 	if (GI > -1 && MI > -1)
@@ -105,7 +108,7 @@ function bool CanClose(UnGatewayClient client)
 }
 
 /** return the PlayInfo instance this client is enditing */
-function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optional string editclass)
+function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optional string editclass, optional out int idx)
 {
 	local PlayInfo newPI;
 	local array<class<Info> > InfoClasses;
@@ -114,7 +117,11 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 
 	for (i = 0; i < PIList.length; i++)
 	{
-		if (PIList[i].client == client) return PIList[i].PI;
+		if (PIList[i].client == client)
+		{
+			idx = i;
+			return PIList[i].PI;
+		}
 	}
 	if (bDontCreate) return none;
 
@@ -146,6 +153,7 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 	PIList.length = PIList.Length+1;
 	PIList[PIList.length-1].client = client;
 	PIList[PIList.length-1].PI = newPI;
+	idx = PIList.length-1;
 	return newPI;
 }
 
@@ -210,10 +218,10 @@ function bool EditedML(UnGatewayClient client, int GI, int MI)
 function execSet(UnGatewayClient client, array<string> cmd)
 {
 	local PlayInfo PI;
-	local int i, j;
+	local int i, j, idx;
 	local string cat;
 
-	PI = GetPI(client);
+	PI = GetPI(client,,,idx);
 	if ((cmd.length == 0) || (cmd[0] == ""))
 	{
 		PI.Sort(0);
@@ -256,6 +264,7 @@ function execSet(UnGatewayClient client, array<string> cmd)
 			cmd[0] = Join(cmd, " ", "\"");
 			if (PI.StoreSetting(i, cmd[0]))
 			{
+				PIList[idx].bChanged = true;
 				client.output(repl(msgSettingSaved, "%s", PI.Settings[i].Value));
 			}
 			else client.outputError(repl(msgInvalidValue, "%s", cmd[0]));
@@ -351,6 +360,9 @@ function execCancelsettings(UnGatewayClient client, array<string> cmd, optional 
 function execEdit(UnGatewayClient client, array<string> cmd)
 {
 	local PlayInfo PI;
+	local array<CacheManager.GameRecord> gra;
+	local int i;
+
 	if (cmd.length == 0 || cmd[0] == "")
 	{
 		client.outputError(msgEditUsage);
@@ -362,7 +374,25 @@ function execEdit(UnGatewayClient client, array<string> cmd)
 		client.outputError(msgAlreadyEditing);
 		return;
 	}
- 	// TODO: check game type
+ 	if (cmd[0] ~= "-game")
+ 	{
+ 		cmd.remove(0, 1);
+ 		cmd[0] = join(cmd, " ");
+		class'CacheManager'.static.GetGameTypeList(gra);
+		for (i = 0; i < gra.length; i++)
+		{
+			if ((gra[i].GameName ~= cmd[0]) || (gra[i].ClassName ~= cmd[0]) || (gra[i].GameAcronym ~= cmd[0]))
+			{
+				cmd[0] = gra[i].ClassName;
+				break;
+			}
+		}
+		if (i == gra.length)
+		{
+			client.outputError(repl(msgNoSuchGameType, "%s", cmd[0]));
+			return;
+		}
+ 	}
  	PI = GetPI(client,, cmd[0]);
  	if (PI == none) return;
  	if (PI.Settings.length == 0)
@@ -791,7 +821,7 @@ static function bool isIDPolicy(string pol)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.10 2004/04/21 15:38:02 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.11 2004/04/22 21:26:42 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -866,4 +896,5 @@ defaultproperties
 	msgInvalidPolicy="'%s' is neither a valid IP policy nor a valid CDKey hash (GUID)"
 	msgPolicyAdd="Added policy: %s"
 	msgNoSuchPolicy="No such policy: %s"
+	msgNoSuchGameType="No such gametype: %s"
 }
