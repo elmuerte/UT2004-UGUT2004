@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.7 2004/04/15 07:56:49 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.8 2004/04/15 20:37:46 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -21,7 +21,7 @@ var localized string msgShutdownUsage, msgNow, msgShutdownRequest, msgShutdownDe
 	msgPAdmin, msgPPing, msgPClass, msgPAddress, msgPHash, msgGTTeamGame,
 	msgGTMapPrefix, msgGTGroup, msgMPlayers;
 
-var localized string CommandHelp[7];
+var localized string CommandHelp[8];
 
 var localized array<string> msgGTGroups;
 
@@ -39,6 +39,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[4].Name: execMutators(client, cmd); return true;
 		case Commands[5].Name: execGametypes(client, cmd); return true;
 		case Commands[6].Name: execMaps(client, cmd); return true;
+		case Commands[7].Name: execSay(client, cmd); return true;
 	}
 	return false;
 }
@@ -249,9 +250,14 @@ function execMaps(UnGatewayClient client, array<string> cmd)
 	}
 }
 
+function execSay(UnGatewayClient client, array<string> cmd)
+{
+	Level.Game.Broadcast(client.PlayerController, join(cmd, " "), 'Say');
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.7 2004/04/15 07:56:49 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.8 2004/04/15 20:37:46 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Level=255)
 	Commands[1]=(Name="abortshutdown",Level=255)
 	Commands[2]=(Name="servertravel",Permission="Mr|Mt|Mm")
@@ -259,6 +265,7 @@ defaultproperties
 	Commands[4]=(Name="mutators")
 	Commands[5]=(Name="gametypes")
 	Commands[6]=(Name="maps")
+	Commands[7]=(Name="say")
 
 	CommandHelp[0]="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]"
 	CommandHelp[1]="abort the delayed shutdown."
@@ -267,6 +274,7 @@ defaultproperties
 	CommandHelp[4]="Show all available mutators.ÿBy default all mutators are listedÿUsage: mutators <match>"
 	CommandHelp[5]="Show all available game types.ÿBy default all game types are listedÿUsage: gametypes <match>"
 	CommandHelp[6]="Show all available maps.ÿBy default all maps are listedÿUsage: maps <match>"
+	CommandHelp[7]="Say something on the server"
 
 	msgShutdownUsage="Usage: shutdown <delay|now> [message]"
 	msgNow="now"
