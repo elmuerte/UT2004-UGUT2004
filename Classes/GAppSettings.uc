@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.16 2004/05/17 09:24:50 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.17 2004/05/21 20:56:29 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -63,8 +63,8 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgAdminEditDelGroupUsage, msgAdminEditDelGroup, msgAdminEditAddmGroupUsage,
 	msgAdminEditDelmGroupUsage, msgAdminLGroups, msgAdminLMGroups, msgGroupUsers,
 	msgGroupManagers, msgGroupAddUsage, msgGroupInvalidName, msgGroupExists, msgGroupAdded,
-	msgGroupInvalidSecLevel	, msgGroupRemoveUsage, msgGroupDoesNotExists, msgGroupRemoved,
-	msgGroupEditUsage	, msgGroupSecLevelUpdate, msgGroupMaster;
+	msgGroupInvalidSecLevel, msgGroupRemoveUsage, msgGroupDoesNotExists, msgGroupRemoved,
+	msgGroupEditUsage, msgGroupSecLevelUpdate, msgGroupMaster;
 
 var localized string CommandHelp[10];
 
@@ -1520,7 +1520,7 @@ function execGroup(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.16 2004/05/17 09:24:50 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.17 2004/05/21 20:56:29 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
