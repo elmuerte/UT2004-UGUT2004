@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.9 2004/04/21 15:38:02 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.10 2004/04/27 08:15:37 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -183,7 +183,7 @@ function SendPlayerInfo(UnGatewayClient client, PlayerController PC)
 	client.output(PadLeft(msgPSpectator, 15)@PC.PlayerReplicationInfo.bOnlySpectator, "    ");
 	client.output(PadLeft(msgPAdmin, 15)@PC.PlayerReplicationInfo.bAdmin, "    ");
 	client.output(PadLeft(msgPPing, 15)@PC.PlayerReplicationInfo.Ping, "    ");
-	client.output(PadLeft(msgPClass, 15)@PC.Name, "    ");
+	client.output(PadLeft(msgPClass, 15)@PC.Class, "    ");
 	client.output(PadLeft(msgPAddress, 15)@PC.GetPlayerNetworkAddress(), "    ");
 	client.output(PadLeft(msgPHash, 15)@PC.GetPlayerIDHash(), "    ");
 }
@@ -343,7 +343,7 @@ function execBan(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.9 2004/04/21 15:38:02 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.10 2004/04/27 08:15:37 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Level=255)
 	Commands[1]=(Name="abortshutdown",Level=255)
 	Commands[2]=(Name="servertravel",Permission="Mr|Mt|Mm")

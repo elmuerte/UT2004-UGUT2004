@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.13 2004/04/26 21:15:19 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.14 2004/04/27 08:15:37 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 /*
@@ -61,11 +61,12 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMultiAdmin, msgSessionError, msgPasswordPrompt1, msgPasswordPrompt2,
 	msgPasswordMatchError, msgPasswordUpdated, msgAdminAddUsage, msgAdminRemoveUsage,
 	msgInvalidPassword, msgAdminCreated, msgAdminCreateExists, msgAdminCreateInvalid,
-	msgAdminPrivileges	, msgAdminMergedPrivileges, msgAdminMaxSecLevel, msgAdminNoSuch,
-	msgAdminRemoved	, msgAdminEditUsage, msgAdminMaster, msgAdminUsage, msgAdminEditPrivUpdate,
-	msgAdminEditAddPriv	;
+	msgAdminPrivileges, msgAdminMergedPrivileges, msgAdminMaxSecLevel, msgAdminNoSuch,
+	msgAdminRemoved, msgAdminEditUsage, msgAdminMaster, msgAdminUsage, msgAdminEditPrivUpdate,
+	msgAdminEditAddPriv	, msgAdminEditInvalidGroup, msgAdminEditGroupAdded, msgAdminEditAddGroupUsage,
+	msgAdminEditDelGroupUsage, msgAdminEditDelGroup;
 
-var localized string CommandHelp[8];
+var localized string CommandHelp[9];
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -82,6 +83,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[5].Name: execMledit(client, cmd); return true;
 		case Commands[6].Name: execPolicy(client, cmd); return true;
 		case Commands[7].Name: execAdmin(client, cmd); return true;
+		case Commands[8].Name: execPrivilege(client, cmd); return true;
 	}
 	return false;
 }
@@ -857,6 +859,7 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 {
 	local int i, idx;
 	local xAdminUser xau;
+	local xAdminGroup xag;
 
 	if (Level.Game.AccessControl.Users == none)
 	{
@@ -950,6 +953,11 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			return;
 		}
 		xau = Level.Game.AccessControl.Users.FindByName(cmd[1]);
+		if (Level.Game.AccessControl.GetLoggedAdmin(client.PlayerController).CanManageUser(xau))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
 		if (xau == none)
 		{
 			client.outputError(repl(msgAdminNoSuch, "%s", cmd[1]));
@@ -976,6 +984,7 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 			}
 			if (cmd.length < 4) xau.Privileges = "";
 			else xau.Privileges = cmd[3];
+			xau.RedoMergedPrivs();
 			Level.Game.AccessControl.SaveAdmins();
 			client.output(msgAdminEditPrivUpdate);
 		}
@@ -992,6 +1001,7 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 				return;
 			}
 			if (InStr("|"$xau.Privileges$"|", "|"$cmd[3]$"|") == -1) xau.Privileges = xau.Privileges$"|"$cmd[3];
+			xau.RedoMergedPrivs();
 			Level.Game.AccessControl.SaveAdmins();
 			client.output(msgAdminEditPrivUpdate);
 		}
@@ -1007,12 +1017,73 @@ function execAdmin(UnGatewayClient client, array<string> cmd)
 				client.outputError(msgAdminEditAddPriv);
 				return;
 			}
-			if (InStr("|"$xau.Privileges$"|", "|"$cmd[3]$"|") == -1)
+			if (InStr(xau.Privileges, "|"$cmd[3]$"|") > -1)
 			{
-				xau.Privileges = xau.Privileges$"|"$cmd[3];
+				xau.Privileges = repl(xau.Privileges, "|"$cmd[3]$"|", "|");
 			}
+			if (InStr(xau.Privileges, cmd[3]$"|") == 0)
+			{
+				xau.Privileges = repl(xau.Privileges, cmd[3]$"|", "");
+			}
+			if (InStr(xau.Privileges, "|"$cmd[3]) == Len(xau.Privileges)-Len("|"$cmd[3]))
+			{
+				xau.Privileges = repl(xau.Privileges, "|"$cmd[3], "");
+			}
+			xau.RedoMergedPrivs();
 			Level.Game.AccessControl.SaveAdmins();
 			client.output(msgAdminEditPrivUpdate);
+		}
+		else if (cmd[2] ~= "addgroup")
+		{
+			if (!Auth.HasPermission(client,, "Ag"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditAddGroupUsage);
+				return;
+			}
+			for (i = 3; i < cmd.length; i ++)
+			{
+				xag = Level.Game.AccessControl.Groups.FindByName(cmd[i]);
+				if (xag == none)
+				{
+					client.outputError(repl(msgAdminEditInvalidGroup, "%s", cmd[i]));
+				}
+				else {
+					xau.AddGroup(xag);
+					client.output(repl(repl(msgAdminEditGroupAdded, "%user", xau.UserName), "%group", xag.GroupName));
+				}
+			}
+			Level.Game.AccessControl.SaveAdmins();
+		}
+		else if (cmd[2] ~= "delgroup")
+		{
+			if (!Auth.HasPermission(client,, "Ag"))
+			{
+				client.outputError(msgUnauthorized);
+				return;
+			}
+			if (cmd.length < 4 || cmd[3] == "")
+			{
+				client.outputError(msgAdminEditDelGroupUsage);
+				return;
+			}
+			for (i = 3; i < cmd.length; i ++)
+			{
+				xag = Level.Game.AccessControl.Groups.FindByName(cmd[i]);
+				if (xag == none)
+				{
+					client.outputError(repl(msgAdminEditInvalidGroup, "%s", cmd[i]));
+				}
+				else {
+					xau.RemoveGroup(xag);
+					client.output(repl(repl(msgAdminEditDelGroup, "%user", xau.UserName), "%group", xag.GroupName));
+				}
+			}
+			Level.Game.AccessControl.SaveAdmins();
 		}
 	}
 	else client.outputError(msgAdminUsage);
@@ -1154,9 +1225,26 @@ function string privilegeToString(string priv)
 	return priv;
 }
 
+function execPrivilege(UnGatewayClient client, array<string> cmd)
+{
+	local int i,j;
+	local array<string> privs;
+	if (cmd.length < 1 || cmd[0] == "") cmd[0] = "*";
+	for (i = 0; i < Level.Game.AccessControl.PrivManagers.Length; i++)
+	{
+		split(Level.Game.AccessControl.PrivManagers[i].MainPrivs$"|"$Level.Game.AccessControl.PrivManagers[i].SubPrivs, "|", privs);
+		for (j = 0; j < privs.length; j++)
+		{
+			if (class'wString'.static.MaskedCompare(Level.Game.AccessControl.PrivManagers[i].Tags[j], cmd[0]) ||
+				class'wString'.static.MaskedCompare(privs[j], cmd[0]))
+				client.output(PadLeft(privs[j], 3)@Level.Game.AccessControl.PrivManagers[i].Tags[j]);
+		}
+	}
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.13 2004/04/26 21:15:19 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.14 2004/04/27 08:15:37 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -1165,6 +1253,7 @@ defaultproperties
 	Commands[5]=(Name="mledit",Permission="Ms")
 	Commands[6]=(Name="policy",Permission="Xi")
 	Commands[7]=(Name="admin",Permission="A")
+	Commands[8]=(Name="privilege")
 
 	CommandHelp[0]="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>"
 	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsage: edit [-game] <class name>"
@@ -1174,6 +1263,7 @@ defaultproperties
 	CommandHelp[5]="Edit a map list.ÿWith the command you can edit the current maplist.ÿUse the 'maplist' command to change the maplist being edited.ÿmledit <add|remove|move|list|save|abort|available> ..."
 	CommandHelp[6]="Manage access policies.ÿWithout any arguments the current access policy will be listed.ÿUsage: policy <add|remove> ..."
 	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit|password> ...ÿUsage: admin add <username>ÿUsage: admin remove <username>ÿUsage: admin edit <username> <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
+	CommandHelp[8]="List all privileges.ÿUsage: privilege <match>"
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -1256,4 +1346,9 @@ defaultproperties
 	msgAdminUsage="admin <list|add|remove|edit|password> ..."
 	msgAdminEditPrivUpdate="Privileges updated"
 	msgAdminEditAddPriv="Usage: admin edit <username> addpriv <privilege>"
+	msgAdminEditInvalidGroup="'%s' is not a valid group name"
+	msgAdminEditGroupAdded="Added %user to group %group"
+	msgAdminEditAddGroupUsage="Usage: admin edit <username> addgroup <group> ..."
+	msgAdminEditDelGroupUsage="Usage: admin edit <username> delgroup <group> ..."
+	msgAdminEditDelGroup="Removed user %user from group %group"
 }
