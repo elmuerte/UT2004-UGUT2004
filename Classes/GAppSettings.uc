@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.5 2004/04/14 20:37:42 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.6 2004/04/15 07:56:49 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -34,7 +34,12 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgInvalidValue, msgUnknownSetting, msgNotEditing, msgSaved, msgSaveFailed,
 	msgChangedAborted, msgUnauthorizedSetting, msgSettingPrivs, msgTrueOrFalse,
 	msgMinMax, msgMaxLength, msgInvalidEditClass, msgAlreadyEditing, msgEditUsage,
-	msgNoSettings, msgEditing, msgMaplistUsage;
+	msgNoSettings, msgEditing, msgMaplistUsage, msgMleditUsage, msgDirtyMapList,
+	msgMLSave, msgMLCanceled, msgInvalidMaplist, msgMLCleared, msgMLList,
+	msgMaplistListUsage, msgInvalidMaplistID, msgEditingML, msgMLEditingBy,
+	msgInvalidGT, msgMaplistactivateUsage, msgActiveList;
+
+var localized string CommandHelp[6];
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -48,8 +53,19 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[2].Name: execSavesettings(client, cmd); return true;
 		case Commands[3].Name: execCancelsettings(client, cmd); return true;
 		case Commands[4].Name: execMaplist(client, cmd); return true;
+		case Commands[5].Name: execMledit(client, cmd); return true;
 	}
 	return false;
+}
+
+function string GetHelpFor(string Command)
+{
+	local int i;
+	for (i = 0; i < Commands.length; i++)
+	{
+		if (Commands[i].Name ~= Command) return CommandHelp[i];
+	}
+	return "";
 }
 
 /** return the PlayInfo instance this client is enditing */
@@ -97,24 +113,57 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 }
 
 /** get maplist editing information */
-function bool GetML(UnGatewayClient client, out int GI, out int MI)
+function bool GetML(UnGatewayClient client, out int GI, out int MI, optional bool bDontCreate, optional bool bSet)
 {
-	local int i;
+	local int i, j;
 	for (i = 0; i < MLList.length; i++)
 	{
 		if (MLList[i].client == client)
 		{
-			GI = MLList[i].GI;
-			MI = MLList[i].MI;
+			if (bSet)
+			{
+				for (j = 0; j < MLList.length; j++)
+				{
+					if (MLList[j].GI == GI && MLList[j].MI == MI && (MLList[j].client != client))
+					{
+						client.outputError(repl(msgMLEditingBy, "%s", MLList[j].client.sUsername));
+						return false;
+					}
+				}
+				MLList[i].GI = GI;
+				MLList[i].MI = MI;
+			}
+			else {
+				GI = MLList[i].GI;
+				MI = MLList[i].MI;
+			}
 			return true;
 		}
 	}
+	if (bDontCreate)
+	{
+		GI = -1;
+		MI = -1;
+		return true;
+	}
 	MLList.length = MLList.Length+1;
 	MLList[MLList.length-1].client = client;
-	MLList[MLList.length-1].GI =
-	MLList[MLList.length-1].MI =
-	GI = MLList[MLList.length-1].GI;
-	MI = MLList[MLList.length-1].MI;
+	if (bSet)
+	{
+		if (MLList[j].GI == GI && MLList[j].MI == MI && (MLList[j].client != client))
+		{
+			client.outputError(repl(msgMLEditingBy, "%s", MLList[j].client.sUsername));
+			return false;
+		}
+		MLList[MLList.length-1].GI = GI;
+		MLList[MLList.length-1].MI = MI;
+	}
+	else {
+		MLList[MLList.length-1].GI = Level.Game.MaplistHandler.GetGameIndex(Level.Game.Class);
+		MLList[MLList.length-1].MI = Level.Game.MaplistHandler.GetActiveList(MLList[MLList.length-1].GI);
+		GI = MLList[MLList.length-1].GI;
+		MI = MLList[MLList.length-1].MI;
+	}
 	return true;
 }
 
@@ -287,29 +336,144 @@ function execEdit(UnGatewayClient client, array<string> cmd)
 function execMaplist(UnGatewayClient client, array<string> cmd)
 {
 	local array<string> recs;
-	local int i;
+	local int i, gi, mi;
 
-	if ((cmd.length == 0) || (cmd[0]))
+	if ((cmd.length == 0) || (cmd[0] == ""))
 	{
 		client.outputError(msgMaplistUsage);
 		return;
 	}
-	else if (cmd[0] ~= "list")
+	if (cmd[0] ~= "list")
 	{
-		Level.Game.MaplistHandler.GetMapListNames()
+		if ((cmd.length == 1) || (cmd[1] == ""))
+		{
+			cmd[1] = string(Level.Game.Class);
+		}
+		gi = Level.Game.MaplistHandler.GetGameIndex(cmd[1]);
+		if (gi == -1)
+		{
+			client.outputError(repl(msgInvalidGT, "%s", cmd[1]));
+			return;
+		}
+		recs = Level.Game.MaplistHandler.GetMapListNames(gi);
+		client.output(msgMLList);
+		for (i = 0; i < recs.length; i++)
+		{
+			client.output(PadCenter(gi$"-"$i, 5)@recs[i]);
+		}
+	}
+	else if (cmd[0] ~= "edit")
+	{
+		if ((cmd.length == 0) || (cmd[0] == ""))
+		{
+			client.outputError(msgMaplistListUsage);
+			return;
+		}
+		GetML(client, gi, mi, true);
+		if (gi > -1 && mi > -1)
+		{
+			if (MapListManager(Level.Game.MaplistHandler).MaplistDirty(gi, mi))
+			{
+				client.outputError(msgDirtyMapList);
+				return;
+			}
+		}
+		i = InStr(cmd[1], "-");
+		if (i < 1)
+		{
+			client.outputError(msgMaplistListUsage);
+			return;
+		}
+		if (!intval(Left(cmd[1], i), gi) || !intval(Mid(cmd[1], i+1), mi))
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		if (Level.Game.MaplistHandler.GetMapListTitle(gi, mi) == "")
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		GetML(client, gi, mi,, true);
+		client.output(repl(msgEditingML, "%s", Level.Game.MaplistHandler.GetMapListTitle(gi, mi)));
+	}
+	else if (cmd[0] ~= "activate")
+	{
+		i = InStr(cmd[1], "-");
+		if (i < 1)
+		{
+			client.outputError(msgMaplistactivateUsage);
+			return;
+		}
+		if (!intval(Left(cmd[1], i), gi) || !intval(Mid(cmd[1], i+1), mi))
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		if (Level.Game.MaplistHandler.GetMapListTitle(gi, mi) == "")
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+  		if (Level.Game.MaplistHandler.SetActiveList(gi, mi))
+  		{
+  			client.output(repl(msgActiveList, "%s", Level.Game.MaplistHandler.GetMapListTitle(gi, mi)));
+  		}
+  		else client.output(msgInvalidMaplist);
+	}
+}
+
+function execMledit(UnGatewayClient client, array<string> cmd)
+{
+	local int i, gi, mi;
+	local array<string> recs;
+
+	if ((cmd.length == 0) || (cmd[0] == ""))
+	{
+		client.outputError(msgMleditUsage);
+		return;
+	}
+	GetML(client, gi, mi);
+	if (cmd[0] ~= "list")
+	{
+		recs = Level.Game.MaplistHandler.GetMapList(gi, mi);
+		for (i = 0; i < recs.length; i++)
+		{
+			client.output(PadRight(i, 3)@recs[i]);
+		}
+	}
+	else if (cmd[0] ~= "save")
+	{
+		if (Level.Game.MaplistHandler.SaveMapList(GI, MI)) client.output(msgMLSave);
+		else client.output(msgInvalidMaplist);
+	}
+	else if (cmd[0] ~= "abort")
+	{
+		client.output(msgMLCanceled);
+	}
+	else if (cmd[0] ~= "clear")
+	{
+		if (Level.Game.MaplistHandler.ClearList(GI, MI)) client.output(msgMLCleared);
+		else client.output(msgInvalidMaplist);
 	}
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.5 2004/04/14 20:37:42 elmuerte Exp $"
-	Commands[0]=(Name="set",Help="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>",Permission="Ms")
-	Commands[1]=(Name="edit",Help="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsafe: edit [-game] <class name>",Permission="Ms")
-	Commands[2]=(Name="savesettings",Help="Save the settings you've made.ÿSettings are not saved until you execute this command.",Permission="Ms")
-	Commands[3]=(Name="cancelsettings",Help="Discard your changes.",Permission="Ms")
+	innerCVSversion="$Id: GAppSettings.uc,v 1.6 2004/04/15 07:56:49 elmuerte Exp $"
+	Commands[0]=(Name="set",Permission="Ms")
+	Commands[1]=(Name="edit",Permission="Ms")
+	Commands[2]=(Name="savesettings",Permission="Ms")
+	Commands[3]=(Name="cancelsettings",Permission="Ms")
+	Commands[4]=(Name="maplist",Permission="Ms")
+	Commands[5]=(Name="mledit",Permission="Ms")
 
-	Commands[4]=(Name="maplist",Help="Manage map lists.",Permission="Ms")
-	Commands[5]=(Name="mledit",Help="Edit a map list",Permission="Ms")
+	CommandHelp[0]="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>"
+	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsafe: edit [-game] <class name>"
+	CommandHelp[2]="Save the settings you've made.ÿSettings are not saved until you execute this command."
+	CommandHelp[3]="Discard your changes."
+	CommandHelp[4]="Manage map lists."
+	CommandHelp[5]="Edit a map list."
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -330,6 +494,19 @@ defaultproperties
 	msgEditUsage="Usage: edit [-gametype] <class name>"
 	msgNoSettings="There are no settings to edit"
 	msgEditing="Now editing %s"
-	msgMaplistUsage="Usage: maplist <add|remove|edit|activate> ..."
-	msgMleditUsage="Usage: mledit <add|remove|move> ..."
+	msgMaplistUsage="Usage: maplist <add|remove|edit|activate|list> ..."
+	msgMleditUsage="Usage: mledit <add|remove|move|list|save|abort> ..."
+	msgDirtyMapList="The current maplist has not been saved, use either 'mledit save' or 'mledit abort'"
+	msgMLSave="Maplist changes saved"
+	msgMLCanceled="Maplist changes canceled"
+	msgInvalidMaplist="Invalid maplist credentials"
+	msgMLCleared="Maplist cleared"
+	msgMLList="  ID  Maplist name"
+	msgMaplistListUsage="Usage: maplist edit <ID>"
+	msgInvalidMaplistID="Invalid maplist ID"
+	msgEditingML="Now editing maplist: %s"
+	msgMLEditingBy="This map list is being edited by %s"
+	msgInvalidGT="'%s' is not a valid gametype class"
+	msgMaplistactivateUsage="Usage: maplist activate <ID>"
+	msgActiveList="%s is now the active map list"
 }

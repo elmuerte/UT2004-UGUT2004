@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.6 2004/04/14 15:34:28 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.7 2004/04/15 07:56:49 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -20,6 +20,8 @@ var localized string msgShutdownUsage, msgNow, msgShutdownRequest, msgShutdownDe
 	msgPlayerListHeader, msgSpectator, msgNoPlayerFound, msgPSpectator,
 	msgPAdmin, msgPPing, msgPClass, msgPAddress, msgPHash, msgGTTeamGame,
 	msgGTMapPrefix, msgGTGroup, msgMPlayers;
+
+var localized string CommandHelp[7];
 
 var localized array<string> msgGTGroups;
 
@@ -39,6 +41,16 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[6].Name: execMaps(client, cmd); return true;
 	}
 	return false;
+}
+
+function string GetHelpFor(string Command)
+{
+	local int i;
+	for (i = 0; i < Commands.length; i++)
+	{
+		if (Commands[i].Name ~= Command) return CommandHelp[i];
+	}
+	return "";
 }
 
 /** program a server shutdown */
@@ -239,14 +251,22 @@ function execMaps(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.6 2004/04/14 15:34:28 elmuerte Exp $"
-	Commands[0]=(Name="shutdown",Help="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]",Level=255)
-	Commands[1]=(Name="abortshutdown",Help="abort the delayed shutdown.",Level=255)
-	Commands[2]=(Name="servertravel",Help="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]",Permission="Mr|Mt|Mm")
-	Commands[3]=(Name="players",Help="Show details about the current players and spectators.ÿWhen an ID is provided more details will be shown about this user.ÿUsage: players [id|name] ...",Permission="Xp")
-	Commands[4]=(Name="mutators",Help="Show all available mutators.ÿBy default all mutators are listedÿUsage: mutators <match>")
-	Commands[5]=(Name="gametypes",Help="Show all available game types.ÿBy default all game types are listedÿUsage: gametypes <match>")
-	Commands[6]=(Name="maps",Help="Show all available maps.ÿBy default all maps are listedÿUsage: maps <match>")
+	innerCVSversion="$Id: GAppSystem.uc,v 1.7 2004/04/15 07:56:49 elmuerte Exp $"
+	Commands[0]=(Name="shutdown",Level=255)
+	Commands[1]=(Name="abortshutdown",Level=255)
+	Commands[2]=(Name="servertravel",Permission="Mr|Mt|Mm")
+	Commands[3]=(Name="players",Permission="Xp")
+	Commands[4]=(Name="mutators")
+	Commands[5]=(Name="gametypes")
+	Commands[6]=(Name="maps")
+
+	CommandHelp[0]="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]"
+	CommandHelp[1]="abort the delayed shutdown."
+	CommandHelp[2]="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]"
+	CommandHelp[3]="Show details about the current players and spectators.ÿWhen an ID is provided more details will be shown about this user.ÿUsage: players [id|name] ..."
+	CommandHelp[4]="Show all available mutators.ÿBy default all mutators are listedÿUsage: mutators <match>"
+	CommandHelp[5]="Show all available game types.ÿBy default all game types are listedÿUsage: gametypes <match>"
+	CommandHelp[6]="Show all available maps.ÿBy default all maps are listedÿUsage: maps <match>"
 
 	msgShutdownUsage="Usage: shutdown <delay|now> [message]"
 	msgNow="now"
