@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppInfo.uc,v 1.1 2004/04/07 16:35:49 elmuerte Exp $ -->
+	<!-- $Id: GAppInfo.uc,v 1.2 2004/04/07 16:37:34 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppInfo extends UnGatewayApplication;
 
@@ -24,12 +24,12 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 }
 
 /** show details about the current players and spectators */
-function execHelp(UnGatewayClient client, array<string> cmd)
+function execPlayers(UnGatewayClient client, array<string> cmd)
 {
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppInfo.uc,v 1.1 2004/04/07 16:35:49 elmuerte Exp $"
+	innerCVSversion="$Id: GAppInfo.uc,v 1.2 2004/04/07 16:37:34 elmuerte Exp $"
 	Commands[0]=(Name="players",Help="Show details about the current players and spectators")
 }
