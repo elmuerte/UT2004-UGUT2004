@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.10 2004/04/27 08:15:37 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.11 2004/05/31 18:55:00 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -25,6 +25,15 @@ var localized string msgShutdownUsage, msgNow, msgShutdownRequest, msgShutdownDe
 var localized string CommandHelp[10];
 
 var localized array<string> msgGTGroups;
+
+function Destroy()
+{
+	if (shutdownTimer != none)
+	{
+		shutdownTimer.Destroy();
+		shutdownTimer = none;
+	}
+}
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -343,7 +352,7 @@ function execBan(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.10 2004/04/27 08:15:37 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.11 2004/05/31 18:55:00 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Level=255)
 	Commands[1]=(Name="abortshutdown",Level=255)
 	Commands[2]=(Name="servertravel",Permission="Mr|Mt|Mm")
