@@ -7,9 +7,14 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.9 2004/04/16 14:28:22 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.10 2004/04/21 15:38:02 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
+/*
+	TODO:
+	- admin add/remove/edit commands
+	- check "edit -game "gametype""
+*/
 
 /** PlayInfo, UnGatewayClient association */
 struct PIListEntry
@@ -41,9 +46,10 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMLRemoveUsage, msgMLRemoved, msgMLRemoveFailed, msgMLAddFailed, msgMLAddMatchUsage,
 	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList,
 	msgMaplistCreateUsage, msgCreateError, msgMaplistDeleteUsage, msgMaplistRemoved,
-	msgMaplistRenameUsage, msgMaplistRenamed;
+	msgMaplistRenameUsage, msgMaplistRenamed, msgPolicyRemoveUsage, msgPolicyAddUsage,
+	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy;
 
-var localized string CommandHelp[6];
+var localized string CommandHelp[7];
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -58,6 +64,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[3].Name: execCancelsettings(client, cmd); return true;
 		case Commands[4].Name: execMaplist(client, cmd); return true;
 		case Commands[5].Name: execMledit(client, cmd); return true;
+		case Commands[6].Name: execPolicy(client, cmd); return true;
 	}
 	return false;
 }
@@ -681,22 +688,125 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 	}
 }
 
+function execPolicy(UnGatewayClient client, array<string> cmd)
+{
+	local int i, n;
+	if ((cmd.length == 0) || (cmd[0] == "") || (cmd[0] ~= "list"))
+	{
+		n = 0;
+		for (i = 0; i < Level.Game.AccessControl.IPPolicies.length; i++)
+		{
+			client.output(PadRight(n++, 3)@Level.Game.AccessControl.IPPolicies[i]);
+		}
+		for (i = 0; i < Level.Game.AccessControl.BannedIDs.length; i++)
+		{
+			client.output(PadRight(n++, 3)@Level.Game.AccessControl.BannedIDs[i]);
+		}
+	}
+	else if (cmd[0] ~= "add")
+	{
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgPolicyAddUsage);
+			return;
+		}
+		if (isIPPolicy(cmd[1]))
+		{
+			Level.Game.AccessControl.IPPolicies[Level.Game.AccessControl.IPPolicies.length] = cmd[1];
+			client.output(repl(msgPolicyAdd, "%s", cmd[1]));
+		}
+		else if (isIDPolicy(cmd[1]))
+		{
+			Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length] = cmd[1];
+			cmd.remove(0, 2);
+			Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length-1] @= join(cmd, " ");
+			client.output(repl(msgPolicyAdd, "%s", Level.Game.AccessControl.BannedIDs[Level.Game.AccessControl.BannedIDs.length-1]));
+		}
+		else {
+			client.outputError(repl(msgInvalidPolicy, "%s", cmd[1]));
+			return;
+		}
+	}
+	else if (cmd[0] ~= "remove")
+	{
+		if ((cmd.length < 2) || (cmd[1] == ""))
+		{
+			client.outputError(msgPolicyRemoveUsage);
+			return;
+		}
+		if (intval(cmd[1], n)) // is ID
+		{
+			if (n < Level.Game.AccessControl.IPPolicies.length)
+			{
+				client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.IPPolicies[n]));
+				Level.Game.AccessControl.IPPolicies.remove(n, 1);
+			}
+			else if (n < Level.Game.AccessControl.BannedIDs.length)
+			{
+				n -= Level.Game.AccessControl.IPPolicies.length;
+				client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.BannedIDs[n]));
+				Level.Game.AccessControl.BannedIDs.remove(n, 1);
+			}
+			else {
+				client.outputError(repl(msgInvalidIndex, "%i", n));
+			}
+		}
+		else {
+			for (i = 0; i < Level.Game.AccessControl.IPPolicies.length; i++)
+			{
+				if (Level.Game.AccessControl.IPPolicies[i] ~= cmd[1])
+				{
+					client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.IPPolicies[i]));
+					Level.Game.AccessControl.IPPolicies.remove(i, 1);
+					return;
+				}
+			}
+			for (i = 0; i < Level.Game.AccessControl.BannedIDs.length; i++)
+			{
+				if (Level.Game.AccessControl.BannedIDs[i] ~= cmd[1])
+				{
+					client.output(repl(msgPolicyRemove, "%s", Level.Game.AccessControl.BannedIDs[i]));
+					Level.Game.AccessControl.BannedIDs.remove(i, 1);
+					return;
+				}
+			}
+			client.outputError(repl(msgNoSuchPolicy, "%s", cmd[1]));
+		}
+	}
+}
+
+/** returns true when the input is a valid IP policy entry */
+static function bool isIPPolicy(string pol)
+{
+	local string ip;
+	if (!divide(pol, ";", pol, ip)) return false;
+	return ((pol ~= "ACCEPT") || (pol ~= "DENY")) && (ip != "");
+}
+
+/** returns true if the input is a valid CDKey hash */
+static function bool isIDPolicy(string pol)
+{
+	return Len(pol) == 32;
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.9 2004/04/16 14:28:22 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.10 2004/04/21 15:38:02 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
 	Commands[3]=(Name="cancelsettings",Permission="Ms")
 	Commands[4]=(Name="maplist",Permission="Ms")
 	Commands[5]=(Name="mledit",Permission="Ms")
+	Commands[6]=(Name="policy",Permission="Xi")
 
 	CommandHelp[0]="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>"
-	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsafe: edit [-game] <class name>"
+	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsage: edit [-game] <class name>"
 	CommandHelp[2]="Save the settings you've made.ÿSettings are not saved until you execute this command."
-	CommandHelp[3]="Discard your changes."
-	CommandHelp[4]="Manage map lists."
-	CommandHelp[5]="Edit a map list."
+	CommandHelp[3]="Discard any changes made to the current settings."
+	CommandHelp[4]="Manage map lists.ÿThis command will allow you to create, delete, rename, list or activate map lists.ÿIt will also allow you to change the maplist that can be edited with 'mledit'.ÿTo list maplists of other game types than the current game type use: maplist list package.gametypeÿUsage: maplist <create|delete|rename|edit|activate|list> ..."
+	CommandHelp[5]="Edit a map list.ÿWith the command you can edit the current maplist.ÿUse the 'maplist' command to change the maplist being edited.ÿmledit <add|remove|move|list|save|abort|available> ..."
+	CommandHelp[6]="Manage access policies.ÿWithout any arguments the current access policy will be listed.ÿUsage: policy <add|remove> ..."
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -750,4 +860,10 @@ defaultproperties
 	msgMaplistRemoved="Maplist removed"
 	msgMaplistRenameUsage="Usage: maplist rename <ID> <new name ...>"
 	msgMaplistRenamed="Maplist renamed to %s"
+	msgPolicyRemoveUsage="Usage: policy remove <id|policy rule>"
+	msgPolicyAddUsage="Usage: policy add <policy rule>"
+	msgPolicyRemove="Removed policy: %s"
+	msgInvalidPolicy="'%s' is neither a valid IP policy nor a valid CDKey hash (GUID)"
+	msgPolicyAdd="Added policy: %s"
+	msgNoSuchPolicy="No such policy: %s"
 }

@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.8 2004/04/15 20:37:46 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.9 2004/04/21 15:38:02 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -19,9 +19,10 @@ var localized string msgShutdownUsage, msgNow, msgShutdownRequest, msgShutdownDe
 	msgNegativeDelay, msgNoPending, msgShutdownAborted, msgServerTravel,
 	msgPlayerListHeader, msgSpectator, msgNoPlayerFound, msgPSpectator,
 	msgPAdmin, msgPPing, msgPClass, msgPAddress, msgPHash, msgGTTeamGame,
-	msgGTMapPrefix, msgGTGroup, msgMPlayers;
+	msgGTMapPrefix, msgGTGroup, msgMPlayers, msgBanUsage, msgKickUsage,
+	msgPlayerKicked, msgPlayerNotKicked, msgPlayerBanned, msgPlayerNotBanned;
 
-var localized string CommandHelp[8];
+var localized string CommandHelp[10];
 
 var localized array<string> msgGTGroups;
 
@@ -40,6 +41,8 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[5].Name: execGametypes(client, cmd); return true;
 		case Commands[6].Name: execMaps(client, cmd); return true;
 		case Commands[7].Name: execSay(client, cmd); return true;
+		case Commands[8].Name: execKick(client, cmd); return true;
+		case Commands[9].Name: execBan(client, cmd); return true;
 	}
 	return false;
 }
@@ -140,6 +143,8 @@ function execPlayers(UnGatewayClient client, array<string> cmd)
 			{
 				for( C=Level.ControllerList; C!=None; C=C.NextController )
 				{
+					if (C.PlayerReplicationInfo == none) continue;
+					if (C.PlayerReplicationInfo.bBot) continue;
 					if (i <= 0)
 					{
 						n++;
@@ -153,6 +158,7 @@ function execPlayers(UnGatewayClient client, array<string> cmd)
 				for( C=Level.ControllerList; C!=None; C=C.NextController )
 				{
 					if (C.PlayerReplicationInfo == none) continue;
+					if (C.PlayerReplicationInfo.bBot) continue;
 					if (class'wString'.static.MaskedCompare(C.PlayerReplicationInfo.PlayerName, cmd[j]))
 					{
 						n++;
@@ -255,9 +261,89 @@ function execSay(UnGatewayClient client, array<string> cmd)
 	Level.Game.Broadcast(client.PlayerController, join(cmd, " "), 'Say');
 }
 
+function execKick(UnGatewayClient client, array<string> cmd)
+{
+	local int i;
+	local Controller C;
+
+	if ((cmd.length < 1) || (cmd[0] == ""))
+	{
+		client.outputError(msgKickUsage);
+		return;
+	}
+	if (intval(cmd[0], i))
+	{
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			if (C.PlayerReplicationInfo == none) continue;
+			if (C.PlayerReplicationInfo.bBot) continue;
+			if (i <= 0)
+			{
+				cmd[0] = C.PlayerReplicationInfo.PlayerName;
+				if (Level.Game.AccessControl.KickPlayer(PlayerController(C))) client.output(repl(msgPlayerKicked, "%s", cmd[0]));
+				else client.outputError(repl(msgPlayerNotKicked, "%s", cmd[0]));
+				return;
+			}
+			i--;
+		}
+	}
+	else {
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			if (C.PlayerReplicationInfo == none) continue;
+			if (C.PlayerReplicationInfo.bBot) continue;
+			if (!(C.PlayerReplicationInfo.PlayerName ~= cmd[0])) continue;
+			cmd[0] = C.PlayerReplicationInfo.PlayerName;
+			if (Level.Game.AccessControl.KickPlayer(PlayerController(C))) client.output(repl(msgPlayerKicked, "%s", cmd[0]));
+			else client.outputError(repl(msgPlayerNotKicked, "%s", cmd[0]));
+			return;
+		}
+	}
+}
+
+function execBan(UnGatewayClient client, array<string> cmd)
+{
+	local int i;
+	local Controller C;
+
+	if ((cmd.length < 1) || (cmd[0] == ""))
+	{
+		client.outputError(msgBanUsage);
+		return;
+	}
+	if (intval(cmd[0], i))
+	{
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			if (C.PlayerReplicationInfo == none) continue;
+			if (C.PlayerReplicationInfo.bBot) continue;
+			if (i <= 0)
+			{
+				cmd[0] = C.PlayerReplicationInfo.PlayerName;
+				if (Level.Game.AccessControl.KickBanPlayer(PlayerController(C))) client.output(repl(msgPlayerKicked, "%s", cmd[0]));
+				else client.outputError(repl(msgPlayerNotKicked, "%s", cmd[0]));
+				return;
+			}
+			i--;
+		}
+	}
+	else {
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			if (C.PlayerReplicationInfo == none) continue;
+			if (C.PlayerReplicationInfo.bBot) continue;
+			if (!(C.PlayerReplicationInfo.PlayerName ~= cmd[0])) continue;
+			cmd[0] = C.PlayerReplicationInfo.PlayerName;
+			if (Level.Game.AccessControl.KickBanPlayer(PlayerController(C))) client.output(repl(msgPlayerBanned, "%s", cmd[0]));
+			else client.outputError(repl(msgPlayerNotBanned, "%s", cmd[0]));
+			return;
+		}
+	}
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.8 2004/04/15 20:37:46 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.9 2004/04/21 15:38:02 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Level=255)
 	Commands[1]=(Name="abortshutdown",Level=255)
 	Commands[2]=(Name="servertravel",Permission="Mr|Mt|Mm")
@@ -266,15 +352,19 @@ defaultproperties
 	Commands[5]=(Name="gametypes")
 	Commands[6]=(Name="maps")
 	Commands[7]=(Name="say")
+	Commands[8]=(Name="kick",Permission="Kp")
+	Commands[9]=(Name="ban",Permission="Kb")
 
-	CommandHelp[0]="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]"
-	CommandHelp[1]="abort the delayed shutdown."
+	CommandHelp[0]="Shutdown the server with a delay.ÿUse the command abortshutdown to abort the delayed shutdown.ÿTo shutdown the server immediately use 'now' as the delay. this shutdown can not be aborted.ÿUsage: shutdown <delay|now> [message]"
+	CommandHelp[1]="Abort the delayed shutdown."
 	CommandHelp[2]="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]"
 	CommandHelp[3]="Show details about the current players and spectators.ÿWhen an ID is provided more details will be shown about this user.ÿUsage: players [id|name] ..."
-	CommandHelp[4]="Show all available mutators.ÿBy default all mutators are listedÿUsage: mutators <match>"
-	CommandHelp[5]="Show all available game types.ÿBy default all game types are listedÿUsage: gametypes <match>"
-	CommandHelp[6]="Show all available maps.ÿBy default all maps are listedÿUsage: maps <match>"
-	CommandHelp[7]="Say something on the server"
+	CommandHelp[4]="Show all available mutators.ÿBy default all mutators are listed, but you can also provide a name to match.ÿUsage: mutators <match>"
+	CommandHelp[5]="Show all available game types.ÿBy default all game types are listed, but you can also provide a name to match.ÿUsage: gametypes <match>"
+	CommandHelp[6]="Show all available maps.ÿBy default all maps are listed, but you can also provide a name to match.ÿUsage: maps <match>"
+	CommandHelp[7]="Say something on the server.ÿUsage: say message ..."
+	CommandHelp[8]="Kick a player from the current game.ÿUsage: kick <name|id>"
+	CommandHelp[9]="Ban a player from the current game.ÿUsage: ban <name|id>"
 
 	msgShutdownUsage="Usage: shutdown <delay|now> [message]"
 	msgNow="now"
@@ -301,4 +391,10 @@ defaultproperties
 	msgGTGroups[2]="UT2004"
 	msgGTGroups[3]="Custom"
 	msgMPlayers="Player count: %min-%max"
+	msgBanUsage="Usage: ban <name|ID>"
+	msgKickUsage="Usage: kick <name|ID>"
+	msgPlayerKicked="%s has been kicked from the server"
+	msgPlayerNotKicked="%s has not been kicked"
+	msgPlayerBanned="%s has been banned from the server"
+	msgPlayerNotBanned="%s has not been banned"
 }
