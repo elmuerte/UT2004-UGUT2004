@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.11 2004/04/22 21:26:42 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.12 2004/04/23 08:53:51 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 /*
@@ -47,7 +47,8 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList,
 	msgMaplistCreateUsage, msgCreateError, msgMaplistDeleteUsage, msgMaplistRemoved,
 	msgMaplistRenameUsage, msgMaplistRenamed, msgPolicyRemoveUsage, msgPolicyAddUsage,
-	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy, msgNoSuchGameType;
+	msgPolicyRemove, msgInvalidPolicy, msgPolicyAdd, msgNoSuchPolicy, msgNoSuchGameType,
+	msgMultiAdmin;
 
 var localized string CommandHelp[7];
 
@@ -65,6 +66,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 		case Commands[4].Name: execMaplist(client, cmd); return true;
 		case Commands[5].Name: execMledit(client, cmd); return true;
 		case Commands[6].Name: execPolicy(client, cmd); return true;
+		case Commands[7].Name: execAdmin(client, cmd); return true;
 	}
 	return false;
 }
@@ -819,9 +821,34 @@ static function bool isIDPolicy(string pol)
 	return Len(pol) == 32;
 }
 
+function execAdmin(UnGatewayClient client, array<string> cmd)
+{
+	local int i;
+	if (Level.Game.AccessControl.Users == none)
+	{
+		client.outputError(msgMultiAdmin);
+		return;
+	}
+	if ((cmd.length == 0) || (cmd[0] == "") || (cmd[0] ~= "list"))
+	{
+		if (!Auth.HasPermission(client,, "Al"))
+		{
+			client.outputError(msgUnauthorized);
+			return;
+		}
+		for (i = 0; i < Level.Game.AccessControl.Users.Users.length; i++)
+		{
+			client.output(Level.Game.AccessControl.Users.Users[i].UserName);
+			client.output("Privileges:"@Level.Game.AccessControl.Users.Users[i].Privileges, "    ");
+			client.output("Merged privileges:"@Level.Game.AccessControl.Users.Users[i].MergedPrivs, "    ");
+			client.output("Security level:"@Level.Game.AccessControl.Users.Users[i].MaxSecLevel(), "    ");
+		}
+	}
+}
+
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.11 2004/04/22 21:26:42 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.12 2004/04/23 08:53:51 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -829,6 +856,7 @@ defaultproperties
 	Commands[4]=(Name="maplist",Permission="Ms")
 	Commands[5]=(Name="mledit",Permission="Ms")
 	Commands[6]=(Name="policy",Permission="Xi")
+	Commands[7]=(Name="admin",Permission="A")
 
 	CommandHelp[0]="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>"
 	CommandHelp[1]="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsage: edit [-game] <class name>"
@@ -837,6 +865,7 @@ defaultproperties
 	CommandHelp[4]="Manage map lists.ÿThis command will allow you to create, delete, rename, list or activate map lists.ÿIt will also allow you to change the maplist that can be edited with 'mledit'.ÿTo list maplists of other game types than the current game type use: maplist list package.gametypeÿUsage: maplist <create|delete|rename|edit|activate|list> ..."
 	CommandHelp[5]="Edit a map list.ÿWith the command you can edit the current maplist.ÿUse the 'maplist' command to change the maplist being edited.ÿmledit <add|remove|move|list|save|abort|available> ..."
 	CommandHelp[6]="Manage access policies.ÿWithout any arguments the current access policy will be listed.ÿUsage: policy <add|remove> ..."
+	CommandHelp[7]="Manage admins.ÿThis command is only available when using the so called xAdmin system.ÿUsage: admin <list|add|remove|edit> ...ÿUsage: admin add <username> <password> <password>ÿUsage: admin remove <username>ÿUsage: admin edit <password|addgroup|delgroup|addpriv|delpriv|setpriv> ..."
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -897,4 +926,5 @@ defaultproperties
 	msgPolicyAdd="Added policy: %s"
 	msgNoSuchPolicy="No such policy: %s"
 	msgNoSuchGameType="No such gametype: %s"
+	msgMultiAdmin="No multi admin system has been enabled (xAdmin.AccessControlIni)"
 }
