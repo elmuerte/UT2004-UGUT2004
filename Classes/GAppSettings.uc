@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.7 2004/04/15 10:46:17 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.8 2004/04/15 14:41:28 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -39,7 +39,9 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgMaplistListUsage, msgInvalidMaplistID, msgEditingML, msgMLEditingBy,
 	msgInvalidGT, msgMaplistactivateUsage, msgActiveList, msgMLAdded, msgMLAddUsage,
 	msgMLRemoveUsage, msgMLRemoved, msgMLRemoveFailed, msgMLAddFailed, msgMLAddMatchUsage,
-	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList;
+	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList,
+	msgMaplistCreateUsage, msgCreateError, msgMaplistDeleteUsage, msgMaplistRemoved,
+	msgMaplistRenameUsage, msgMaplistRenamed;
 
 var localized string CommandHelp[6];
 
@@ -142,21 +144,14 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 /** get maplist editing information */
 function bool GetML(UnGatewayClient client, out int GI, out int MI, optional bool bDontCreate, optional bool bSet)
 {
-	local int i, j;
+	local int i;
+	if (EditedML(client, GI, MI)) return false;
 	for (i = 0; i < MLList.length; i++)
 	{
 		if (MLList[i].client == client)
 		{
 			if (bSet)
 			{
-				for (j = 0; j < MLList.length; j++)
-				{
-					if (MLList[j].GI == GI && MLList[j].MI == MI && (MLList[j].client != client))
-					{
-						client.outputError(repl(msgMLEditingBy, "%s", MLList[j].client.sUsername));
-						return false;
-					}
-				}
 				MLList[i].GI = GI;
 				MLList[i].MI = MI;
 			}
@@ -177,11 +172,6 @@ function bool GetML(UnGatewayClient client, out int GI, out int MI, optional boo
 	MLList[MLList.length-1].client = client;
 	if (bSet)
 	{
-		if (MLList[j].GI == GI && MLList[j].MI == MI && (MLList[j].client != client))
-		{
-			client.outputError(repl(msgMLEditingBy, "%s", MLList[j].client.sUsername));
-			return false;
-		}
 		MLList[MLList.length-1].GI = GI;
 		MLList[MLList.length-1].MI = MI;
 	}
@@ -192,6 +182,21 @@ function bool GetML(UnGatewayClient client, out int GI, out int MI, optional boo
 		MI = MLList[MLList.length-1].MI;
 	}
 	return true;
+}
+
+/** returns true when the combination of GI\MI is being edited by someone else */
+function bool EditedML(UnGatewayClient client, int GI, int MI)
+{
+	local int j;
+	for (j = 0; j < MLList.length; j++)
+	{
+		if (MLList[j].GI == GI && MLList[j].MI == MI && (MLList[j].client != client))
+		{
+			client.outputError(repl(msgMLEditingBy, "%s", MLList[j].client.sUsername));
+			return true;
+		}
+	}
+	return false;
 }
 
 function execSet(UnGatewayClient client, array<string> cmd)
@@ -364,6 +369,7 @@ function execMaplist(UnGatewayClient client, array<string> cmd)
 {
 	local array<string> recs;
 	local int i, gi, mi;
+	local string tmp;
 
 	if ((cmd.length == 0) || (cmd[0] == ""))
 	{
@@ -391,7 +397,7 @@ function execMaplist(UnGatewayClient client, array<string> cmd)
 	}
 	else if (cmd[0] ~= "edit")
 	{
-		if ((cmd.length == 0) || (cmd[0] == ""))
+		if ((cmd.length == 1) || (cmd[1] == ""))
 		{
 			client.outputError(msgMaplistListUsage);
 			return;
@@ -447,6 +453,85 @@ function execMaplist(UnGatewayClient client, array<string> cmd)
   			client.output(repl(msgActiveList, "%s", Level.Game.MaplistHandler.GetMapListTitle(gi, mi)));
   		}
   		else client.output(msgInvalidMaplist);
+	}
+	else if (cmd[0] ~= "create")
+	{
+		if (cmd.length < 3 || cmd[1] == "")
+		{
+			client.outputError(msgMaplistCreateUsage);
+			return;
+		}
+		tmp = cmd[1];
+		GI = Level.Game.MaplistHandler.GetGameIndex(tmp);
+		if (GI == -1)
+		{
+			client.outputError(repl(msgInvalidGT, "%s", tmp));
+			return;
+		}
+		cmd.remove(0, 2);
+		cmd[0] = join(cmd, " ");
+		recs.length = 0; // force default maps
+		MI = Level.Game.MaplistHandler.AddList(tmp, cmd[0], recs);
+		if (MI > -1)
+		{
+			client.output(repl(msgActiveList, "%s", Level.Game.MaplistHandler.GetMapListTitle(gi, mi)));
+		}
+		else client.outputError(msgCreateError);
+	}
+	else if (cmd[0] ~= "delete")
+	{
+		if ((cmd.length == 1) || (cmd[1] == ""))
+		{
+			client.outputError(msgMaplistDeleteUsage);
+			return;
+		}
+		i = InStr(cmd[1], "-");
+		if (i < 1)
+		{
+			client.outputError(msgMaplistDeleteUsage);
+			return;
+		}
+		if (!intval(Left(cmd[1], i), gi) || !intval(Mid(cmd[1], i+1), mi))
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		if (Level.Game.MaplistHandler.GetMapListTitle(gi, mi) == "")
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		if (EditedML(client, GI, MI)) return;
+		Level.Game.MaplistHandler.RemoveList(gi, mi);
+		client.output(msgMaplistRemoved);
+	}
+	else if (cmd[0] ~= "rename")
+	{
+		if ((cmd.length < 3) || (cmd[2] == ""))
+		{
+			client.outputError(msgMaplistRenameUsage);
+			return;
+		}
+		i = InStr(cmd[1], "-");
+		if (i < 1)
+		{
+			client.outputError(msgMaplistRenameUsage);
+			return;
+		}
+		if (!intval(Left(cmd[1], i), gi) || !intval(Mid(cmd[1], i+1), mi))
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		if (Level.Game.MaplistHandler.GetMapListTitle(gi, mi) == "")
+		{
+			client.outputError(msgInvalidMaplistID);
+			return;
+		}
+		cmd.remove(0, 2);
+		cmd[0] = join(cmd, " ");
+		Level.Game.MaplistHandler.RenameList(gi, mi, cmd[0]);
+		client.output(repl(msgMaplistRenamed, "%s", cmd[0]));
 	}
 }
 
@@ -597,7 +682,7 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.7 2004/04/15 10:46:17 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.8 2004/04/15 14:41:28 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -631,7 +716,7 @@ defaultproperties
 	msgEditUsage="Usage: edit [-gametype] <class name>"
 	msgNoSettings="There are no settings to edit"
 	msgEditing="Now editing %s"
-	msgMaplistUsage="Usage: maplist <add|remove|edit|activate|list> ..."
+	msgMaplistUsage="Usage: maplist <create|delete|rename|edit|activate|list> ..."
 	msgMleditUsage="Usage: mledit <add|remove|move|list|save|abort|available> ..."
 	msgDirtyMapList="The current maplist has not been saved, use either 'mledit save' or 'mledit abort'"
 	msgMLSave="Maplist changes saved"
@@ -658,4 +743,10 @@ defaultproperties
 	msgMapMoved="Map '%map' moved to position %pos"
 	msgInvalidIndex="'%i' is not a valid index"
 	msgMapNotInList="'%map' is not in this map list"
+	msgMaplistCreateUsage="Usage: maplist create <gametype> <title ...>"
+	msgCreateError="Error creating a new maplist"
+	msgMaplistDeleteUsage="Usage: maplist delete <ID>"
+	msgMaplistRemoved="Maplist removed"
+	msgMaplistRenameUsage="Usage: maplist rename <ID> <new name ...>"
+	msgMaplistRenamed="Maplist renamed to %s"
 }
