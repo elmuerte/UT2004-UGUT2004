@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSystem.uc,v 1.2 2004/04/11 21:43:29 elmuerte Exp $ -->
+	<!-- $Id: GAppSystem.uc,v 1.3 2004/04/12 19:32:34 elmuerte Exp $ -->
 *******************************************************************************/
 
 class GAppSystem extends UnGatewayApplication;
@@ -87,12 +87,12 @@ function execServerTravel(UnGatewayClient client, array<string> cmd)
   		client.output(GetURLMap(true));
 	}
 	client.output("Server travel:"@cmd[0]);
-	//Level.ServerTravel(cmd[0], false);
+	Level.ServerTravel(cmd[0], false);
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSystem.uc,v 1.2 2004/04/11 21:43:29 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSystem.uc,v 1.3 2004/04/12 19:32:34 elmuerte Exp $"
 	Commands[0]=(Name="shutdown",Help="Shutdown the server.ÿUse the command abortshutdown to abort the delayed shutdown.ÿUsage: shutdown <delay|now> [message]")
 	Commands[1]=(Name="abortshutdown",Help="abort the delayed shutdown.")
 	Commands[2]=(Name="servertravel",Help="Executes a server travel.ÿUse this to change the current map of the server.ÿWhen no url is given the last url will be used.ÿUsage: servertravel [url]")
