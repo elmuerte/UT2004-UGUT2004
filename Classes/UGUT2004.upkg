@@ -1,0 +1,10 @@
+[Flags]
+AllowDownload=False
+ServerSideOnly=True
+ClientOptional=False
+Official=False
+
+[Package_Description]
+UnGateway command classes especially for UT2004
+servers.
+
