@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppInfo.uc,v 1.3 2004/04/07 21:16:39 elmuerte Exp $ -->
+	<!-- $Id: GAppInfo.uc,v 1.4 2004/04/08 19:43:26 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppInfo extends UnGatewayApplication;
 
@@ -27,7 +27,7 @@ function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 function execPlayers(UnGatewayClient client, array<string> cmd)
 {
 	local Controller C;
-	local int i;
+	local int i, j, n;
 	if ((cmd.length == 0) || (cmd[0] == ""))
 	{
 		i = 0;
@@ -41,39 +41,57 @@ function execPlayers(UnGatewayClient client, array<string> cmd)
 		}
 	}
 	else {
-		if (intval(cmd[0], i))
+		for (j = 0; j < cmd.length; j++)
 		{
-			for( C=Level.ControllerList; C!=None; C=C.NextController )
+			n = 0;
+			if (intval(cmd[j], i))
 			{
-				if (i <= 0) break;
-				i--;
+				for( C=Level.ControllerList; C!=None; C=C.NextController )
+				{
+					if (i <= 0)
+					{
+						n++;
+						break;
+					}
+					i--;
+				}
+				if (C != none) SendPlayerInfo(client, PlayerController(C));
+			}
+			else { // is a player name
+				for( C=Level.ControllerList; C!=None; C=C.NextController )
+				{
+					if (C.PlayerReplicationInfo == none) continue;
+					if (class'wString'.static.MaskedCompare(C.PlayerReplicationInfo.PlayerName, cmd[j]))
+					{
+						n++;
+						SendPlayerInfo(client, PlayerController(C));
+					}
+				}
+			}
+			if (n == 0)
+			{
+				client.outputError("No player found for:"@cmd[j]); // LOCALIZE
+				return;
 			}
 		}
-		else { // is a player name
-			for( C=Level.ControllerList; C!=None; C=C.NextController )
-			{
-				if (C.PlayerReplicationInfo == none) continue;
-				if (C.PlayerReplicationInfo.PlayerName ~= cmd[0]) break;
-			}
-		}
-
-		if (C == none)
-		{
-			client.outputError("No player found for:"@cmd[0]); // LOCALIZE
-			return;
-		}
-		client.output(C.PlayerReplicationInfo.PlayerName);
-		client.output("    Spectator:"@C.PlayerReplicationInfo.bOnlySpectator); // LOCALIZE
-		client.output("    Admin:    "@C.PlayerReplicationInfo.bAdmin); // LOCALIZE
-		client.output("    Ping:     "@C.PlayerReplicationInfo.Ping); // LOCALIZE
-		client.output("    Class:    "@C.Name); // LOCALIZE
-		client.output("    Address:  "@PlayerController(C).GetPlayerNetworkAddress()); // LOCALIZE
-		client.output("    Hash:     "@PlayerController(C).GetPlayerIDHash()); // LOCALIZE
 	}
+}
+
+/** send detailed information about a player */
+function SendPlayerInfo(UnGatewayClient client, PlayerController PC)
+{
+	if (PC == none) return;
+	client.output(PC.PlayerReplicationInfo.PlayerName);
+	client.output("    Spectator:"@PC.PlayerReplicationInfo.bOnlySpectator); // LOCALIZE
+	client.output("    Admin:    "@PC.PlayerReplicationInfo.bAdmin); // LOCALIZE
+	client.output("    Ping:     "@PC.PlayerReplicationInfo.Ping); // LOCALIZE
+	client.output("    Class:    "@PC.Name); // LOCALIZE
+	client.output("    Address:  "@PC.GetPlayerNetworkAddress()); // LOCALIZE
+	client.output("    Hash:     "@PC.GetPlayerIDHash()); // LOCALIZE
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppInfo.uc,v 1.3 2004/04/07 21:16:39 elmuerte Exp $"
-	Commands[0]=(Name="players",Help="Show details about the current players and spectators.|When an ID is provided more details will be shown about this user.|Usage: players [id|name]")
+	innerCVSversion="$Id: GAppInfo.uc,v 1.4 2004/04/08 19:43:26 elmuerte Exp $"
+	Commands[0]=(Name="players",Help="Show details about the current players and spectators.ÿWhen an ID is provided more details will be shown about this user.ÿUsage: players [id|name] ...")
 }
