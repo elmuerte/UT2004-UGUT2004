@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.8 2004/04/15 14:41:28 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.9 2004/04/16 14:28:22 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -134,6 +134,7 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 			m = m.NextMutator;
 		}
 	}
+	if (InfoClasses.length == 0) return none;
 	newPI.Init(InfoClasses);
 	PIList.length = PIList.Length+1;
 	PIList[PIList.length-1].client = client;
@@ -682,7 +683,7 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.8 2004/04/15 14:41:28 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.9 2004/04/16 14:28:22 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
