@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.6 2004/04/15 07:56:49 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.7 2004/04/15 10:46:17 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -37,7 +37,9 @@ var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgNoSettings, msgEditing, msgMaplistUsage, msgMleditUsage, msgDirtyMapList,
 	msgMLSave, msgMLCanceled, msgInvalidMaplist, msgMLCleared, msgMLList,
 	msgMaplistListUsage, msgInvalidMaplistID, msgEditingML, msgMLEditingBy,
-	msgInvalidGT, msgMaplistactivateUsage, msgActiveList;
+	msgInvalidGT, msgMaplistactivateUsage, msgActiveList, msgMLAdded, msgMLAddUsage,
+	msgMLRemoveUsage, msgMLRemoved, msgMLRemoveFailed, msgMLAddFailed, msgMLAddMatchUsage,
+	msgMLRemoveMatchUsage, msgInvalidIndex, msgMapMoved, msgMLMoveUsage, msgMapNotInList;
 
 var localized string CommandHelp[6];
 
@@ -66,6 +68,31 @@ function string GetHelpFor(string Command)
 		if (Commands[i].Name ~= Command) return CommandHelp[i];
 	}
 	return "";
+}
+
+function bool CanClose(UnGatewayClient client)
+{
+	local int GI, MI;
+	local bool res;
+
+	res = true;
+	if (GetPI(client, true) != none)
+	{
+		client.output("");
+		client.outputError(msgAlreadyEditing);
+		res = false;
+	}
+	GetML(client, GI, MI, true);
+	if (GI > -1 && MI > -1)
+	{
+		if (MapListManager(Level.Game.MaplistHandler).MaplistDirty(gi, mi))
+		{
+			client.output("");
+			client.outputError(msgDirtyMapList);
+			res = false;
+		}
+	}
+	return super.CanClose(client) && res;
 }
 
 /** return the PlayInfo instance this client is enditing */
@@ -427,6 +454,8 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 {
 	local int i, gi, mi;
 	local array<string> recs;
+	local array<MaplistRecord.MapItem> mlar;
+	local string tmp;
 
 	if ((cmd.length == 0) || (cmd[0] == ""))
 	{
@@ -437,6 +466,7 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 	if (cmd[0] ~= "list")
 	{
 		recs = Level.Game.MaplistHandler.GetMapList(gi, mi);
+		client.output(Level.Game.MaplistHandler.GetMapListTitle(gi, mi));
 		for (i = 0; i < recs.length; i++)
 		{
 			client.output(PadRight(i, 3)@recs[i]);
@@ -449,6 +479,7 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 	}
 	else if (cmd[0] ~= "abort")
 	{
+		Level.Game.MaplistHandler.ResetList(GI, MI);
 		client.output(msgMLCanceled);
 	}
 	else if (cmd[0] ~= "clear")
@@ -456,11 +487,117 @@ function execMledit(UnGatewayClient client, array<string> cmd)
 		if (Level.Game.MaplistHandler.ClearList(GI, MI)) client.output(msgMLCleared);
 		else client.output(msgInvalidMaplist);
 	}
+	else if (cmd[0] ~= "available")
+	{
+		if (MapListManager(Level.Game.MaplistHandler).GetAvailableMaps(gi, mlar))
+		{
+			for (i = 0; i < mlar.length; i++)
+			{
+				client.output(mlar[i].MapName);
+			}
+		}
+	}
+	else if (cmd[0] ~= "add")
+	{
+		if (cmd.length == 1)
+		{
+			client.outputError(msgMLAddUsage);
+			return;
+		}
+		if (cmd[1] ~= "-match")
+		{
+			if (cmd.length == 2 || cmd[2] == "")
+			{
+				client.outputError(msgMLAddMatchUsage);
+				return;
+			}
+			tmp = cmd[2];
+			cmd.remove(1, cmd.length-1);
+			if (MapListManager(Level.Game.MaplistHandler).GetAvailableMaps(gi, mlar))
+			{
+				for (i = 0; i < mlar.length; i++)
+				{
+					if (!class'wString'.static.MaskedCompare(mlar[i].MapName, tmp)) continue;
+					cmd[i+1] = mlar[i].MapName;
+				}
+			}
+		}
+		tmp = Level.Game.MaplistHandler.GetMapListTitle(gi, mi);
+		for (i = 1; i < cmd.length; i++)
+		{
+			if (Level.Game.MaplistHandler.AddMap(GI, MI, cmd[i])) client.output(repl(repl(msgMLAdded, "%map", cmd[i]), "%list", tmp));
+			else client.output(repl(msgMLAddFailed, "%s", cmd[i]));
+		}
+	}
+	else if (cmd[0] ~= "remove")
+	{
+		if (cmd.length == 1)
+		{
+			client.outputError(msgMLRemoveUsage);
+			return;
+		}
+		if (cmd[1] ~= "-match")
+		{
+			if (cmd.length == 2 || cmd[2] == "")
+			{
+				client.outputError(msgMLRemoveMatchUsage);
+				return;
+			}
+			tmp = cmd[2];
+			cmd.remove(1, cmd.length-1);
+			if (MapListManager(Level.Game.MaplistHandler).GetAvailableMaps(gi, mlar))
+			{
+				for (i = 0; i < mlar.length; i++)
+				{
+					if (!class'wString'.static.MaskedCompare(mlar[i].MapName, tmp)) continue;
+					cmd[i+1] = mlar[i].MapName;
+				}
+			}
+		}
+		tmp = Level.Game.MaplistHandler.GetMapListTitle(gi, mi);
+		for (i = 1; i < cmd.length; i++)
+		{
+			if (Level.Game.MaplistHandler.RemoveMap(GI, MI, cmd[i])) client.output(repl(repl(msgMLRemoved, "%map", cmd[i]), "%list", tmp));
+			else client.output(repl(msgMLRemoveFailed, "%s", cmd[i]));
+		}
+	}
+	else if (cmd[0] ~= "move")
+	{
+		if (cmd.length < 3)
+		{
+			client.outputError(msgMLMoveUsage);
+			return;
+		}
+		if (Level.Game.MaplistHandler.GetMapIndex(GI, MI, cmd[1]) == -1)
+		{
+			client.outputError(repl(msgMapNotInList, "%map", cmd[1]));
+			return;
+		}
+		if (Left(cmd[2], 1) == "-")
+		{
+			i = int(cmd[2]);
+		}
+		else if (Left(cmd[2], 1) == "+")
+		{
+			i = int(Mid(cmd[2], 1));
+		}
+		else {
+			if (!intval(cmd[2], i))
+			{
+				client.outputError(repl(msgInvalidIndex, "%i", cmd[2]));
+				return;
+			}
+			// calculate offset
+			i = i - Level.Game.MaplistHandler.GetMapIndex(GI, MI, cmd[1]);
+		}
+		Level.Game.MaplistHandler.ShiftMap(GI, MI, cmd[1], i);
+		client.output(repl(repl(msgMapMoved, "%map", cmd[1]), "%pos", Level.Game.MaplistHandler.GetMapIndex(GI, MI, cmd[1])));
+	}
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.6 2004/04/15 07:56:49 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.7 2004/04/15 10:46:17 elmuerte Exp $"
 	Commands[0]=(Name="set",Permission="Ms")
 	Commands[1]=(Name="edit",Permission="Ms")
 	Commands[2]=(Name="savesettings",Permission="Ms")
@@ -495,7 +632,7 @@ defaultproperties
 	msgNoSettings="There are no settings to edit"
 	msgEditing="Now editing %s"
 	msgMaplistUsage="Usage: maplist <add|remove|edit|activate|list> ..."
-	msgMleditUsage="Usage: mledit <add|remove|move|list|save|abort> ..."
+	msgMleditUsage="Usage: mledit <add|remove|move|list|save|abort|available> ..."
 	msgDirtyMapList="The current maplist has not been saved, use either 'mledit save' or 'mledit abort'"
 	msgMLSave="Maplist changes saved"
 	msgMLCanceled="Maplist changes canceled"
@@ -509,4 +646,16 @@ defaultproperties
 	msgInvalidGT="'%s' is not a valid gametype class"
 	msgMaplistactivateUsage="Usage: maplist activate <ID>"
 	msgActiveList="%s is now the active map list"
+	msgMLAddUsage="Usage: mledit add <map> ..."
+	msgMLAdded="Added %map to %list"
+	msgMLRemoveUsage="Usage: mledit remove <map> ..."
+	msgMLRemoved="Removed %map from %list"
+	msgMLRemoveFailed="Failed to remove the map %s"
+	msgMLAddFailed="Failed to add the map %s"
+	msgMLAddMatchUsage="Usage: mledit add -match <mask>"
+	msgMLRemoveMatchUsage="Usage: mledit remove -match <mask>"
+	msgMLMoveUsage="Usage: mledit move <map> <new position|+offset|-offset>"
+	msgMapMoved="Map '%map' moved to position %pos"
+	msgInvalidIndex="'%i' is not a valid index"
+	msgMapNotInList="'%map' is not in this map list"
 }
