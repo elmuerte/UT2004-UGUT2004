@@ -7,7 +7,7 @@
 	Copyright 2003, 2004 Michiel "El Muerte" Hendriks							<br />
 	Released under the Open Unreal Mod License									<br />
 	http://wiki.beyondunreal.com/wiki/OpenUnrealModLicense						<br />
-	<!-- $Id: GAppSettings.uc,v 1.4 2004/04/14 15:34:28 elmuerte Exp $ -->
+	<!-- $Id: GAppSettings.uc,v 1.5 2004/04/14 20:37:42 elmuerte Exp $ -->
 *******************************************************************************/
 class GAppSettings extends UnGatewayApplication;
 
@@ -20,11 +20,21 @@ struct PIListEntry
 /** PlayInfo instance for each client */
 var protected array<PIListEntry> PIList;
 
+/** maplist editing entry */
+struct MLListEntry
+{
+	var int GI;
+	var int MI;
+	var UnGatewayClient client;
+};
+/** information about the map list being edited by the client */
+var protected array<MLListEntry> MLList;
+
 var localized string msgCategories, msgSetListUsage, msgSettingSaved,
 	msgInvalidValue, msgUnknownSetting, msgNotEditing, msgSaved, msgSaveFailed,
 	msgChangedAborted, msgUnauthorizedSetting, msgSettingPrivs, msgTrueOrFalse,
 	msgMinMax, msgMaxLength, msgInvalidEditClass, msgAlreadyEditing, msgEditUsage,
-	msgNoSettings, msgEditing;
+	msgNoSettings, msgEditing, msgMaplistUsage;
 
 function bool ExecCmd(UnGatewayClient client, array<string> cmd)
 {
@@ -84,6 +94,28 @@ function PlayInfo GetPI(UnGatewayClient client, optional bool bDontCreate, optio
 	PIList[PIList.length-1].client = client;
 	PIList[PIList.length-1].PI = newPI;
 	return newPI;
+}
+
+/** get maplist editing information */
+function bool GetML(UnGatewayClient client, out int GI, out int MI)
+{
+	local int i;
+	for (i = 0; i < MLList.length; i++)
+	{
+		if (MLList[i].client == client)
+		{
+			GI = MLList[i].GI;
+			MI = MLList[i].MI;
+			return true;
+		}
+	}
+	MLList.length = MLList.Length+1;
+	MLList[MLList.length-1].client = client;
+	MLList[MLList.length-1].GI =
+	MLList[MLList.length-1].MI =
+	GI = MLList[MLList.length-1].GI;
+	MI = MLList[MLList.length-1].MI;
+	return true;
 }
 
 function execSet(UnGatewayClient client, array<string> cmd)
@@ -254,18 +286,30 @@ function execEdit(UnGatewayClient client, array<string> cmd)
 
 function execMaplist(UnGatewayClient client, array<string> cmd)
 {
-	client.outputError("not yet implemented");
+	local array<string> recs;
+	local int i;
+
+	if ((cmd.length == 0) || (cmd[0]))
+	{
+		client.outputError(msgMaplistUsage);
+		return;
+	}
+	else if (cmd[0] ~= "list")
+	{
+		Level.Game.MaplistHandler.GetMapListNames()
+	}
 }
 
 defaultproperties
 {
-	innerCVSversion="$Id: GAppSettings.uc,v 1.4 2004/04/14 15:34:28 elmuerte Exp $"
+	innerCVSversion="$Id: GAppSettings.uc,v 1.5 2004/04/14 20:37:42 elmuerte Exp $"
 	Commands[0]=(Name="set",Help="Change or list the settings.ÿWhen called without any arguments it will list all setting groups.ÿYou can use wild cards to match groups or settings.ÿTo list all settings in a group use: set -list <groupname> ...ÿTo list all settings matching a name use: set <match>ÿTo edit a setting use: set <setting> <new value ...>",Permission="Ms")
 	Commands[1]=(Name="edit",Help="Change the class to edit.ÿThe class must be a fully qualified name: package.classÿIt's also possible to edit a complete game type. In that case use: -game <name or class of the gametype>ÿUsafe: edit [-game] <class name>",Permission="Ms")
 	Commands[2]=(Name="savesettings",Help="Save the settings you've made.ÿSettings are not saved until you execute this command.",Permission="Ms")
 	Commands[3]=(Name="cancelsettings",Help="Discard your changes.",Permission="Ms")
 
-	Commands[4]=(Name="maplist",Help="Edit a maplist.",Permission="Ms")
+	Commands[4]=(Name="maplist",Help="Manage map lists.",Permission="Ms")
+	Commands[5]=(Name="mledit",Help="Edit a map list",Permission="Ms")
 
 	msgCategories="Categories:"
 	msgSetListUsage="Usage: set -list <category> ..."
@@ -286,4 +330,6 @@ defaultproperties
 	msgEditUsage="Usage: edit [-gametype] <class name>"
 	msgNoSettings="There are no settings to edit"
 	msgEditing="Now editing %s"
+	msgMaplistUsage="Usage: maplist <add|remove|edit|activate> ..."
+	msgMleditUsage="Usage: mledit <add|remove|move> ..."
 }
